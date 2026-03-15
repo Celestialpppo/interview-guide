@@ -8,7 +8,7 @@ lombok = "1.18.36"
 junit-jupiter = "5.12.0"
 redisson = "4.0.0"
 mapstruct = "1.6.3"
-aws-sdk = "2.29.51"
+aws-sdk = "2.42.13"
 itext = "8.0.5"
 pinyin4j = "2.5.0"
 
