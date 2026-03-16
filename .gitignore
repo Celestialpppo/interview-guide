@@ -14,3 +14,5 @@ qodana.yaml
 app/src/main/resources/application-dev.yml
 /docs
 /app/src/main/resources/application.yml
+/data
+/docker
