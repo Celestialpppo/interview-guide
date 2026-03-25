@@ -47,8 +47,8 @@ public class RagChatSessionEntity {
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "rag_session_knowledge_bases",
-        joinColumns = @JoinColumn(name = "session_id"),
-        inverseJoinColumns = @JoinColumn(name = "knowledge_base_id")
+        joinColumns = @JoinColumn(name = "session_id",  referencedColumnName = "id"),
+        inverseJoinColumns = @JoinColumn(name = "knowledge_base_id", referencedColumnName = "id")
     )
     private Set<KnowledgeBaseEntity> knowledgeBases = new HashSet<>();
 

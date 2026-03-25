@@ -94,9 +94,11 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
             log.warn("简历已被删除，跳过分析任务: resumeId={}", resumeId);
             return;
         }
-
+        // 调用评分服务进行分析
         ResumeAnalysisResponse analysis = gradingService.analyzeResume(payload.content());
+        // 获取简历实体
         ResumeEntity resume = resumeRepository.findById(resumeId).orElse(null);
+        // 如果简历不存在，跳过保存结果
         if (resume == null) {
             log.warn("简历在分析期间被删除，跳过保存结果: resumeId={}", resumeId);
             return;
@@ -140,6 +142,7 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
 
     /**
      * 更新分析状态
+     *
      */
     private void updateAnalyzeStatus(Long resumeId, AsyncTaskStatus status, String error) {
         try {

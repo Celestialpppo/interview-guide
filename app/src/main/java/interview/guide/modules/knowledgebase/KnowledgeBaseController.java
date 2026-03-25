@@ -25,6 +25,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * 知识库控制器
@@ -65,7 +66,12 @@ public class KnowledgeBaseController {
     @GetMapping("/api/knowledgebase/{id}")
     public Result<KnowledgeBaseListItemDTO> getKnowledgeBase(@PathVariable Long id) {
         return listService.getKnowledgeBase(id)
-                .map(Result::success)
+                .map(new Function<KnowledgeBaseListItemDTO, Result<KnowledgeBaseListItemDTO>>(){
+                    @Override
+                    public Result<KnowledgeBaseListItemDTO> apply(KnowledgeBaseListItemDTO knowledgeBaseListItemDTO) {
+                        return Result.success(knowledgeBaseListItemDTO);
+                    }
+                })
                 .orElse(Result.error("知识库不存在"));
     }
 
@@ -141,7 +147,7 @@ public class KnowledgeBaseController {
     @PostMapping(value = "/api/knowledgebase/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @RateLimit(dimensions = {RateLimit.Dimension.GLOBAL, RateLimit.Dimension.IP}, count = 3)
     public Result<Map<String, Object>> uploadKnowledgeBase(
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file") MultipartFile file,
             @RequestParam(value = "name", required = false) String name,
             @RequestParam(value = "category", required = false) String category) {
         return Result.success(uploadService.uploadKnowledgeBase(file, name, category));

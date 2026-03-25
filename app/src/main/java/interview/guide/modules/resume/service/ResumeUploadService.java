@@ -102,13 +102,15 @@ public class ResumeUploadService {
     private void validateContentType(String contentType) {
         fileValidationService.validateContentTypeByList(
             contentType,
-            appConfig.getAllowedTypes(),
+            appConfig.getAllowedTypes(), //list
             "不支持的文件类型: " + contentType
         );
     }
 
     /**
      * 处理重复简历
+     * 有历史分析结果 → 返回历史分析结果
+     * 没有历史分析结果 → 返回简历当前状态,标记它是重复简历。
      */
     private Map<String, Object> handleDuplicateResume(ResumeEntity resume) {
         log.info("检测到重复简历，返回历史分析结果: resumeId={}", resume.getId());

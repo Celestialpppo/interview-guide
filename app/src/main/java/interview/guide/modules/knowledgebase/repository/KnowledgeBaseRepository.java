@@ -76,9 +76,9 @@ public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBaseEnti
      * @param ids 知识库ID列表
      * @return 更新的行数
      */
-    @Modifying
+    @Modifying//默认情况下，Spring Data JPA 会把 @Query 当成查询语句，@Modifying会告诉框架告诉框架 @Query 不是查询数据，而是修改数据
     @Query("UPDATE KnowledgeBaseEntity k SET k.questionCount = k.questionCount + 1 WHERE k.id IN :ids")
-    int incrementQuestionCountBatch(@Param("ids") List<Long> ids);
+    int incrementQuestionCountBatch(@Param("ids") List<Long> ids); //把 Java 方法参数 ids 绑定到 JPQL 语句里的 :ids。
 
     // ==================== 统计查询 ====================
 

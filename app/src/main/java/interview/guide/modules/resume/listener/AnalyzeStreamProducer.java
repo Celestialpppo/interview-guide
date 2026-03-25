@@ -20,6 +20,31 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
 
     private final ResumeRepository resumeRepository;
 
+
+    /**
+     * 使用 record 快速创建一个数据类，用于封装任务参数没等于以下：
+     * public final class AnalyzeTaskPayload {
+     *     // 1. 私有 final 字段
+     *     private final Long resumeId;
+     *     private final String content;
+     *
+     *     // 2. 构造方法
+     *     public AnalyzeTaskPayload(Long resumeId, String content) {
+     *         this.resumeId = resumeId;
+     *         this.content = content;
+     *     }
+     *
+     *     // 3. 自动生成的 getter 方法
+     *     public Long resumeId() { return resumeId; }
+     *     public String content() { return content; }
+     *
+     *     // 4. 自动生成的 equals()
+     *     // 5. 自动生成的 hashCode()
+     *     // 6. 自动生成的 toString()
+     * }
+     * @param resumeId
+     * @param content
+     */
     record AnalyzeTaskPayload(Long resumeId, String content) {}
 
     public AnalyzeStreamProducer(RedisService redisService, ResumeRepository resumeRepository) {

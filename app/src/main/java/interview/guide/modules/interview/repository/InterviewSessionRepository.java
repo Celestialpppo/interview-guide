@@ -24,8 +24,11 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
 
     /**
      * 根据会话ID查找（同时加载关联的简历）
+     * Join关联查询，Fetch把关联对象也查出来
+     * :sessionId：命名参数
+     * /@Param("sessionId")这个是把方法参数绑定到上面的命名参数。
      */
-    @Query("SELECT s FROM InterviewSessionEntity s JOIN FETCH s.resume WHERE s.sessionId = :sessionId")
+    @Query("SELECT s FROM InterviewSessionEntity s JOIN FETCH s.resume WHERE s.sessionId = :sessionId") //JPQL
     Optional<InterviewSessionEntity> findBySessionIdWithResume(@Param("sessionId") String sessionId);
     
     /**

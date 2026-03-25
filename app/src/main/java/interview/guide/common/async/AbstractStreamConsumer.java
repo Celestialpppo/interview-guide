@@ -22,6 +22,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public abstract class AbstractStreamConsumer<T> {
 
     private final RedisService redisService;
+    //控制消费循环。
+    //单例继承这个抽象类，然后作为一个单例bean使用，单例的话就只有一个running实例，多个消费者共用这个running实例
+    //所以才需要AtomicBoolean在多线程的情况下，会保持可见性，避免一个线程修改running的值，其他线程看不到。
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExecutorService executorService;
     private String consumerName;
@@ -30,6 +33,7 @@ public abstract class AbstractStreamConsumer<T> {
         this.redisService = redisService;
     }
 
+    //当 Spring 把这个 Bean 创建好、依赖注入也完成之后，自动调用这个方法。
     @PostConstruct
     public void init() {
         this.consumerName = consumerPrefix() + UUID.randomUUID().toString().substring(0, 8);
@@ -52,6 +56,7 @@ public abstract class AbstractStreamConsumer<T> {
         log.info("{}消费者已启动: consumerName={}", taskDisplayName(), consumerName);
     }
 
+    //当 Spring 容器销毁这个 Bean 时，自动调用这个方法。
     @PreDestroy
     public void shutdown() {
         running.set(false);
@@ -61,15 +66,16 @@ public abstract class AbstractStreamConsumer<T> {
         log.info("{}消费者已关闭: consumerName={}", taskDisplayName(), consumerName);
     }
 
+    //消费循环
     private void consumeLoop() {
         while (running.get()) {
             try {
                 redisService.streamConsumeMessages(
-                    streamKey(),
-                    groupName(),
-                    consumerName,
-                    AsyncTaskStreamConstants.BATCH_SIZE,
-                    AsyncTaskStreamConstants.POLL_INTERVAL_MS,
+                    streamKey(), // Stream 队列名称
+                    groupName(), // 消费者组名称
+                    consumerName, // 消费者唯一标识
+                    AsyncTaskStreamConstants.BATCH_SIZE, // 批量消费的消息数量
+                    AsyncTaskStreamConstants.POLL_INTERVAL_MS, // 轮询间隔时间 - 阻塞等待超时时间（毫秒）
                     this::processMessage
                 );
             } catch (Exception e) {
@@ -82,13 +88,15 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
+    //处理单个消息
     private void processMessage(StreamMessageId messageId, Map<String, String> data) {
+        //解析消息
         T payload = parsePayload(messageId, data);
         if (payload == null) {
             ackMessage(messageId);
             return;
         }
-
+        //获取重试次数
         int retryCount = parseRetryCount(data);
         log.info("开始处理{}任务: {}, messageId={}, retryCount={}",
             taskDisplayName(), payloadIdentifier(payload), messageId, retryCount);
@@ -112,6 +120,7 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
+    //解析重试次数
     protected int parseRetryCount(Map<String, String> data) {
         try {
             return Integer.parseInt(data.getOrDefault(AsyncTaskStreamConstants.FIELD_RETRY_COUNT, "0"));
@@ -120,6 +129,7 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
+    //截断错误信息
     protected String truncateError(String error) {
         if (error == null) {
             return null;
@@ -127,6 +137,7 @@ public abstract class AbstractStreamConsumer<T> {
         return error.length() > 500 ? error.substring(0, 500) : error;
     }
 
+    //确认消息
     private void ackMessage(StreamMessageId messageId) {
         try {
             redisService.streamAck(streamKey(), groupName(), messageId);

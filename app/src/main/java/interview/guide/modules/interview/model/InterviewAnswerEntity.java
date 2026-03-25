@@ -1,12 +1,16 @@
 package interview.guide.modules.interview.model;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 /**
  * 面试答案实体
  */
+@Setter
+@Getter
 @Entity
 @Table(name = "interview_answers",
     uniqueConstraints = {
@@ -16,14 +20,13 @@ import java.time.LocalDateTime;
         @Index(name = "idx_interview_answer_session_question", columnList = "session_id,question_index")
     })
 public class InterviewAnswerEntity {
-    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     // 关联的会话
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "session_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY) //一个InterviewSessionEntity会对应多个InterviewAnswerEntity
+    @JoinColumn(name = "session_id", nullable = false) //指向InterviewSessionEntity的主键
     private InterviewSessionEntity session;
     
     // 问题索引
@@ -64,93 +67,5 @@ public class InterviewAnswerEntity {
     protected void onCreate() {
         answeredAt = LocalDateTime.now();
     }
-    
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-    
-    public void setId(Long id) {
-        this.id = id;
-    }
-    
-    public InterviewSessionEntity getSession() {
-        return session;
-    }
-    
-    public void setSession(InterviewSessionEntity session) {
-        this.session = session;
-    }
-    
-    public Integer getQuestionIndex() {
-        return questionIndex;
-    }
-    
-    public void setQuestionIndex(Integer questionIndex) {
-        this.questionIndex = questionIndex;
-    }
-    
-    public String getQuestion() {
-        return question;
-    }
-    
-    public void setQuestion(String question) {
-        this.question = question;
-    }
-    
-    public String getCategory() {
-        return category;
-    }
-    
-    public void setCategory(String category) {
-        this.category = category;
-    }
-    
-    public String getUserAnswer() {
-        return userAnswer;
-    }
-    
-    public void setUserAnswer(String userAnswer) {
-        this.userAnswer = userAnswer;
-    }
-    
-    public Integer getScore() {
-        return score;
-    }
-    
-    public void setScore(Integer score) {
-        this.score = score;
-    }
-    
-    public String getFeedback() {
-        return feedback;
-    }
-    
-    public void setFeedback(String feedback) {
-        this.feedback = feedback;
-    }
-    
-    public String getReferenceAnswer() {
-        return referenceAnswer;
-    }
-    
-    public void setReferenceAnswer(String referenceAnswer) {
-        this.referenceAnswer = referenceAnswer;
-    }
-    
-    public String getKeyPointsJson() {
-        return keyPointsJson;
-    }
-    
-    public void setKeyPointsJson(String keyPointsJson) {
-        this.keyPointsJson = keyPointsJson;
-    }
-    
-    public LocalDateTime getAnsweredAt() {
-        return answeredAt;
-    }
-    
-    public void setAnsweredAt(LocalDateTime answeredAt) {
-        this.answeredAt = answeredAt;
-    }
+
 }

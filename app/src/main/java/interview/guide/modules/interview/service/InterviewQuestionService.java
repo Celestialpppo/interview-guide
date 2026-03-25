@@ -74,8 +74,9 @@ public class InterviewQuestionService {
     }
     
     /**
-     * 生成面试问题
-     * 
+     * 根据简历内容和问题权重分配，调用ai大模型，生成JSON格式的问题
+     * JSON格式是根据中间DTO定义的，最后再转为InterviewQuestionDTO对象
+     *
      * @param resumeText 简历文本
      * @param questionCount 问题数量
      * @param historicalQuestions 历史问题列表（可选）
@@ -113,7 +114,7 @@ public class InterviewQuestionService {
                 variables.put("historicalQuestions", "暂无历史提问");
             }
             
-            String userPrompt = userPromptTemplate.render(variables);
+            String userPrompt = userPromptTemplate.render(variables); //把历史提问也作为userPrompt的一部分
             
             // 添加格式指令到系统提示词
             String systemPromptWithFormat = systemPrompt + "\n\n" + outputConverter.getFormat();
@@ -183,6 +184,11 @@ public class InterviewQuestionService {
     
     /**
      * 转换DTO为业务对象
+     * 先检查数据是否为空；
+     * 然后遍历 AI 返回的每一道题；
+     * 把每道题的主问题转换成 InterviewQuestionDTO；
+     * 再把这道题下面的追问也一起展开、转换进去；
+     * 最后返回一个程序可直接使用的线性问题流。
      */
     private List<InterviewQuestionDTO> convertToQuestions(QuestionListDTO dto) {
         List<InterviewQuestionDTO> questions = new ArrayList<>();

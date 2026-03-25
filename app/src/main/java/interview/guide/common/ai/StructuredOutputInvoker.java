@@ -10,10 +10,12 @@ import org.springframework.stereotype.Component;
 
 /**
  * 统一封装结构化输出调用与重试策略。
+ * 在这里发生大模型调用。
  */
 @Component
 public class StructuredOutputInvoker {
 
+    //这是一个固定提示词模板。
     private static final String STRICT_JSON_INSTRUCTION = """
 请仅返回可被 JSON 解析器直接解析的 JSON 对象，并严格满足字段结构要求：
 1) 不要输出 Markdown 代码块（如 ```json）。
@@ -21,9 +23,12 @@ public class StructuredOutputInvoker {
 3) 所有字符串内引号必须正确转义。
 """;
 
+    //最大重试次数，至少为1
     private final int maxAttempts;
+    //控制 “重试时要不要把上一次失败原因拼进 prompt”，可以把错误信息提示给模型，帮助它修正输出
     private final boolean includeLastErrorInRetryPrompt;
 
+    //@Value是Spring的注解，用于从配置文件中注入值
     public StructuredOutputInvoker(
         @Value("${app.ai.structured-max-attempts:2}") int maxAttempts,
         @Value("${app.ai.structured-include-last-error:true}") boolean includeLastErrorInRetryPrompt
@@ -32,6 +37,7 @@ public class StructuredOutputInvoker {
         this.includeLastErrorInRetryPrompt = includeLastErrorInRetryPrompt;
     }
 
+    //调用大模型，要求返回结构化结果，并把结果解析成 T 类型对象；如果失败则重试，最后失败则抛业务异常。
     public <T> T invoke(
         ChatClient chatClient,
         String systemPromptWithFormat,
@@ -44,15 +50,17 @@ public class StructuredOutputInvoker {
     ) {
         Exception lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            //第一次尝试：直接用原始 systemPromptWithFormat
+            //第二次及以后：在原 prompt 基础上，调用 buildRetrySystemPrompt(...) 生成一个更严格的重试 prompt
             String attemptSystemPrompt = attempt == 1
                 ? systemPromptWithFormat
                 : buildRetrySystemPrompt(systemPromptWithFormat, lastError);
             try {
-                return chatClient.prompt()
-                    .system(attemptSystemPrompt)
-                    .user(userPrompt)
-                    .call()
-                    .entity(outputConverter);
+                return chatClient.prompt() //开始构造一次 prompt 请求。
+                    .system(attemptSystemPrompt)//设置系统提示词。
+                    .user(userPrompt)//设置用户提示词。
+                    .call()//真正发起一次同步调用。
+                    .entity(outputConverter);//把模型返回的文本，转换成想要的 Java 类型。
             } catch (Exception e) {
                 lastError = e;
                 log.warn("{}结构化解析失败，准备重试: attempt={}, error={}", logContext, attempt, e.getMessage());
