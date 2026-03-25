@@ -66,7 +66,7 @@ public class InterviewSessionCache {
             this.currentIndex = currentIndex;
             this.status = status;
             try {
-                this.questionsJson = objectMapper.writeValueAsString(questions);
+                this.questionsJson = objectMapper.writeValueAsString(questions); //把java对象转换为json字符串
             } catch (JacksonException e) {
                 throw new RuntimeException("序列化问题列表失败", e);
             }
@@ -90,11 +90,12 @@ public class InterviewSessionCache {
         String key = buildSessionKey(sessionId);
         CachedSession cachedSession = new CachedSession(
             sessionId, resumeText, resumeId, questions, currentIndex, status, objectMapper
-        );
+        ); //包含当前会话id、简历文字、简历id、ai生成的问题集合、当前问题索引、会话状态
 
         redisService.set(key, cachedSession, SESSION_TTL);
 
         // 如果有 resumeId，建立映射关系（用于查找未完成会话）
+        // 这里保存的都是未完成的session！！！通过简历id查询的是未完成的session！！！
         if (resumeId != null && isUnfinishedStatus(status)) {
             saveResumeSessionMapping(resumeId, sessionId);
         }
@@ -107,10 +108,10 @@ public class InterviewSessionCache {
      */
     public Optional<CachedSession> getSession(String sessionId) {
         String key = buildSessionKey(sessionId);
-        CachedSession session = redisService.get(key);
+        CachedSession session = redisService.get(key); // interview:session:_sessionId "CachedSession包括session中的信息"
         if (session != null) {
             log.debug("从缓存获取会话: sessionId={}", sessionId);
-            return Optional.of(session);
+            return Optional.of(session); //非null值
         }
         return Optional.empty();
     }
@@ -181,10 +182,10 @@ public class InterviewSessionCache {
      */
     public Optional<String> findUnfinishedSessionId(Long resumeId) {
         String key = buildResumeSessionKey(resumeId);
-        String sessionId = redisService.get(key);
+        String sessionId = redisService.get(key); // interview:resume:_resumeId "sessionId"
         if (sessionId != null) {
             // 验证会话是否仍然存在且未完成
-            Optional<CachedSession> sessionOpt = getSession(sessionId);
+            Optional<CachedSession> sessionOpt = getSession(sessionId);//根据sessionid查缓存中的对应会话记录
             if (sessionOpt.isPresent() && isUnfinishedStatus(sessionOpt.get().getStatus())) {
                 return Optional.of(sessionId);
             } else {
@@ -235,6 +236,11 @@ public class InterviewSessionCache {
         }
     }
 
+    /**
+     * 检查会话状态，如果是会话已创建、面试进行中返回true
+     * @param status 会话状态
+     * @return boolean
+     */
     private boolean isUnfinishedStatus(SessionStatus status) {
         return status == SessionStatus.CREATED || status == SessionStatus.IN_PROGRESS;
     }

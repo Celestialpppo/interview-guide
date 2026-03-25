@@ -29,7 +29,7 @@ export type QuestionType =
   | 'SPRING' 
   | 'SPRING_BOOT';
 
-export interface CreateInterviewRequest {
+export interface CreateInterviewRequestDTO {
   resumeText: string;
   questionCount: number;
   resumeId?: number;

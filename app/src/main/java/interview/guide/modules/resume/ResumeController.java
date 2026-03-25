@@ -35,7 +35,14 @@ public class ResumeController {
 
     /**
      * 上传简历并获取分析结果
-     *
+     * 验证文件是否合法 -> 简历去重（重复则返回历史分析） -> 解析简历文本
+     * -> 把multipart格式的简历用tika解析 -> 上传到RustFS对象存储
+     * -> 把简历对象保存到Postgres数据库 -> *发送分析任务到 Redis Stream*
+     * -> 返回{
+     *     简历：[id，文件名，分析状态]，
+     *     存储：[文件key，文件url，简历id]，
+     *     是否重复：boolean
+     * }
      * @param file 简历文件（支持PDF、DOCX、DOC、TXT、MD等）
      * @return 简历分析结果，包含评分和建议
      */

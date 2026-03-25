@@ -37,6 +37,8 @@ public class KnowledgeBaseVectorService {
     }
     /**
      * 将知识库内容向量化并存储
+     * 将文本内容分块, 变为一个个document -> 为chunk(document类型)添加metadata,标识其所属knowledgeBase
+     * -> 分批向量化.
      * @param knowledgeBaseId 知识库ID
      * @param content 知识库文本内容
      */
@@ -47,14 +49,14 @@ public class KnowledgeBaseVectorService {
             // 1. 先删除该知识库的旧向量数据
             deleteByKnowledgeBaseId(knowledgeBaseId);
             
-            // 2. 将文本分块
+            // 2. 将文本分块,把一个长文本文档切成多个较小的文本块, 返回一个包含原document部分内容的多document列表
             List<Document> chunks = textSplitter.apply(
                 List.of(new Document(content))
             );
             
             log.info("文本分块完成: {} 个chunks", chunks.size());
             
-            // 3. 为每个chunk添加metadata（知识库ID）
+            // 3. 为每个chunk添加metadata，metadata为json格式，kb_id是知识库ID
             // 统一使用 String 类型存储，确保查询一致性
             chunks.forEach(chunk -> chunk.getMetadata().put("kb_id", knowledgeBaseId.toString()));
             // 4. 分批向量化并存储（阿里云 DashScope API 限制 batch size <= 10）
@@ -67,7 +69,7 @@ public class KnowledgeBaseVectorService {
                 int end = Math.min(start + MAX_BATCH_SIZE, totalChunks);
                 List<Document> batch = chunks.subList(start, end);
                 log.debug("处理第 {}/{} 批: chunks {}-{}", i + 1, batchCount, start + 1, end);
-                vectorStore.add(batch);
+                vectorStore.add(batch);//内部会调用embedding大模型去向量化, 然后写入向量数据库
             }
             log.info("知识库向量化完成: kbId={}, chunks={}, batches={}",
                     knowledgeBaseId, totalChunks, batchCount);
@@ -102,6 +104,8 @@ public class KnowledgeBaseVectorService {
                 builder.filterExpression(buildKbFilterExpression(knowledgeBaseIds));
             }
 
+            // 拿用户的查询文本去向量库里做相似度检索，返回一组最相关的 Document。
+            // spring ai的vectorStore只是去请求embedding模型来向量化query, 真正查询相似度还是pgvector来做
             List<Document> results = vectorStore.similaritySearch(builder.build());
             if (results == null) {
                 return List.of();

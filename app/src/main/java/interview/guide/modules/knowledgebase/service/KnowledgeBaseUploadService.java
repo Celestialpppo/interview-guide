@@ -65,21 +65,21 @@ public class KnowledgeBaseUploadService {
         }
 
         // 4. 解析知识库文本（用于向量化）
-        String content = parseService.parseContent(file);
+        String content = parseService.parseContent(file); //提取文本内容
         if (content == null || content.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "无法从文件中提取文本内容，请确保文件格式正确");
         }
 
-        // 5. 保存文件到RustFS
+        // 5. 保存文件到RustFS, 保存的是multipart，也就是源文件！！
         String fileKey = storageService.uploadKnowledgeBase(file);
         String fileUrl = storageService.getFileUrl(fileKey);
         log.info("知识库已存储到RustFS: {}", fileKey);
 
-        // 6. 保存知识库元数据到数据库（状态为 PENDING）
+        // 6. 保存知识库元数据到数据库（状态为 PENDING），知识库元数据是一个entity！对应数据库中的一张表！
         KnowledgeBaseEntity savedKb = persistenceService.saveKnowledgeBase(file, name, category, fileKey, fileUrl, fileHash);
 
         // 7. 发送向量化任务到 Redis Stream（异步处理）
-        vectorizeStreamProducer.sendVectorizeTask(savedKb.getId(), content);
+        vectorizeStreamProducer.sendVectorizeTask(savedKb.getId(), content);//KnowledgeBase数据库主键id+该知识库的文本内容
 
         log.info("知识库上传完成，向量化任务已入队: {}, kbId={}", fileName, savedKb.getId());
 

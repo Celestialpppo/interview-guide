@@ -68,7 +68,7 @@ public class KnowledgeBasePersistenceService {
             kb.setStorageKey(storageKey);
             kb.setStorageUrl(storageUrl);
 
-            KnowledgeBaseEntity saved = knowledgeBaseRepository.save(kb);
+            KnowledgeBaseEntity saved = knowledgeBaseRepository.save(kb); // 这是把一个KnowledgeBaseEntity存进knowledgeBase数据库了
             log.info("知识库已保存: id={}, name={}, category={}, hash={}", saved.getId(), saved.getName(), saved.getCategory(), fileHash);
             return saved;
         } catch (Exception e) {

@@ -6,6 +6,7 @@ import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse.ScoreDetail;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse.Suggestion;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -25,11 +26,10 @@ import java.util.Map;
  * 简历评分服务
  * 使用Spring AI调用LLM对简历进行评分和建议
  */
+@Slf4j
 @Service
 public class ResumeGradingService {
-    
-    private static final Logger log = LoggerFactory.getLogger(ResumeGradingService.class);
-    
+
     private final ChatClient chatClient;
     private final PromptTemplate systemPromptTemplate;
     private final PromptTemplate userPromptTemplate;
@@ -66,7 +66,7 @@ public class ResumeGradingService {
             @Value("classpath:prompts/resume-analysis-system.st") Resource systemPromptResource,
             @Value("classpath:prompts/resume-analysis-user.st") Resource userPromptResource) throws IOException {
         this.chatClient = chatClientBuilder.build();
-        this.structuredOutputInvoker = structuredOutputInvoker;
+        this.structuredOutputInvoker = structuredOutputInvoker; // structuredOutputInvoker 统一封装结构化输出调用与重试策略。
         this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
         this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
         this.outputConverter = new BeanOutputConverter<>(ResumeAnalysisResponseDTO.class);
@@ -74,7 +74,7 @@ public class ResumeGradingService {
     
     /**
      * 分析简历并返回评分和建议
-     * 
+     * 输入一段简历文本，调用 AI 做分析，最后返回系统定义好的简历分析结果对象。
      * @param resumeText 简历文本内容
      * @return 分析结果
      */
@@ -82,7 +82,7 @@ public class ResumeGradingService {
         log.info("开始分析简历，文本长度: {} 字符", resumeText.length());
         
         try {
-            // 加载系统提示词
+            // 加载系统提示词，把模板渲染成最终要发给模型的文本
             String systemPrompt = systemPromptTemplate.render();
             
             // 加载用户提示词并填充变量
@@ -91,8 +91,9 @@ public class ResumeGradingService {
             String userPrompt = userPromptTemplate.render(variables);
             
             // 添加格式指令到系统提示词
+            // 根据 ResumeAnalysisResponseDTO.class，自动生成一段结构化输出要求
             String systemPromptWithFormat = systemPrompt + "\n\n" + outputConverter.getFormat();
-            
+
             // 调用AI
             ResumeAnalysisResponseDTO dto;
             try {
@@ -105,7 +106,7 @@ public class ResumeGradingService {
                     "简历分析失败：",
                     "简历分析",
                     log
-                );
+                ); // 返回的是BeanOutputConverter<ResumeAnalysisResponseDTO>，即ResumeAnalysisResponseDTO对象
                 log.debug("AI响应解析成功: overallScore={}", dto.overallScore());
             } catch (Exception e) {
                 log.error("简历分析AI调用失败: {}", e.getMessage(), e);

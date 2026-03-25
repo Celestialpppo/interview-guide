@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -35,7 +36,7 @@ public class InterviewController {
      */
     @PostMapping("/api/interview/sessions")
     @RateLimit(dimensions = {RateLimit.Dimension.GLOBAL, RateLimit.Dimension.IP}, count = 5)
-    public Result<InterviewSessionDTO> createSession(@RequestBody CreateInterviewRequest request) {
+    public Result<InterviewSessionDTO> createSession(@Valid @RequestBody CreateInterviewRequestDTO request) {
         log.info("创建面试会话，题目数量: {}", request.questionCount());
         InterviewSessionDTO session = sessionService.createSession(request);
         return Result.success(session);

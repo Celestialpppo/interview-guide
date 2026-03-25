@@ -14,7 +14,7 @@ import java.util.List;
  */
 @Mapper(
     componentModel = MappingConstants.ComponentModel.SPRING,
-    unmappedTargetPolicy = ReportingPolicy.IGNORE
+    unmappedTargetPolicy = ReportingPolicy.IGNORE //目标对象有字段没映射时，是 ERROR / WARN / IGNORE。
 )
 public interface KnowledgeBaseMapper {
     

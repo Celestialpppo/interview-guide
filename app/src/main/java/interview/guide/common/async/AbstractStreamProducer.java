@@ -3,6 +3,7 @@ package interview.guide.common.async;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.infrastructure.redis.RedisService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Map;
 
@@ -15,6 +16,7 @@ public abstract class AbstractStreamProducer<T> {
 
     private final RedisService redisService;
 
+    @Autowired
     protected AbstractStreamProducer(RedisService redisService) {
         this.redisService = redisService;
     }
@@ -22,9 +24,9 @@ public abstract class AbstractStreamProducer<T> {
     protected void sendTask(T payload) {
         try {
             String messageId = redisService.streamAdd(
-                streamKey(),
-                buildMessage(payload),
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
+                streamKey(),  // Stream键名: String
+                buildMessage(payload), //消息体: Map
+                AsyncTaskStreamConstants.STREAM_MAX_LEN  // Stream最大长度: int
             );
             log.info("{}任务已发送到Stream: {}, messageId={}",
                 taskDisplayName(), payloadIdentifier(payload), messageId);

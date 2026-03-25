@@ -22,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,6 +52,12 @@ public class KnowledgeBaseQueryService {
     private final int topkLong;
     private final double minScoreShort;
     private final double minScoreDefault;
+
+    private record SearchParams(int topK, double minScore) {
+    }
+
+    private record QueryContext(String originalQuestion, List<String> candidateQueries, SearchParams searchParams) {
+    }
 
     public KnowledgeBaseQueryService(
             ChatClient.Builder chatClientBuilder,
@@ -111,8 +118,8 @@ public class KnowledgeBaseQueryService {
         countService.updateQuestionCounts(knowledgeBaseIds);
 
         // 2. Query rewrite + 动态参数检索（RAG）
-        QueryContext queryContext = buildQueryContext(question);
-        List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds);
+        QueryContext queryContext = buildQueryContext(question); //根据问题来构造query上下文
+        List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds); //拿到检索过后相似的向量所对应的内容
 
         if (!hasEffectiveHit(question, relevantDocs)) {
             return NO_RESULT_RESPONSE;
@@ -127,7 +134,7 @@ public class KnowledgeBaseQueryService {
 
         // 4. 构建提示词
         String systemPrompt = buildSystemPrompt();
-        String userPrompt = buildUserPrompt(context, question);
+        String userPrompt = buildUserPrompt(context, question); //实际上也就是把检索出来的文本片段加入提示词罢了,因为大模型是个黑箱
 
         try {
             // 5. 调用AI生成回答
@@ -168,7 +175,7 @@ public class KnowledgeBaseQueryService {
      * 查询知识库并返回完整响应
      */
     public QueryResponse queryKnowledgeBase(QueryRequest request) {
-        String answer = answerQuestion(request.knowledgeBaseIds(), request.question());
+        String answer = answerQuestion(request.knowledgeBaseIds(), request.question()); //查询知识库并获得相应
 
         // 获取知识库名称（多个知识库用逗号分隔）
         List<String> kbNames = listService.getKnowledgeBaseNames(request.knowledgeBaseIds());
@@ -202,13 +209,15 @@ public class KnowledgeBaseQueryService {
             List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds);
 
             if (!hasEffectiveHit(question, relevantDocs)) {
+                //为了避免短query输入大模型，大模型给出有效信息不足等回答，将query进行长短识别
+                //如果是长query就直接返回true，否则就要检查这个短 query 本身，是否字面出现在检索出的文档文本里，这保证材料至少不是明显弱相关。
                 return Flux.just(NO_RESULT_RESPONSE);
             }
 
             // 3. 构建上下文
             String context = relevantDocs.stream()
                     .map(Document::getText)
-                    .collect(Collectors.joining("\n\n---\n\n"));
+                    .collect(Collectors.joining("\n\n---\n\n")); //用 --- 分隔
 
             log.debug("检索到 {} 个相关文档片段", relevantDocs.size());
 
@@ -220,7 +229,7 @@ public class KnowledgeBaseQueryService {
             Flux<String> responseFlux = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
-                    .stream()
+                    .stream()//构建出来的是一个 Flux<String> 发布源
                     .content();
 
             log.info("开始流式输出知识库回答(探测窗口): kbIds={}", knowledgeBaseIds);
@@ -238,25 +247,27 @@ public class KnowledgeBaseQueryService {
     }
 
     private QueryContext buildQueryContext(String originalQuestion) {
-        String normalizedQuestion = normalizeQuestion(originalQuestion);
-        String rewrittenQuestion = rewriteQuestion(normalizedQuestion);
-        Set<String> candidates = new LinkedHashSet<>();
+        String normalizedQuestion = normalizeQuestion(originalQuestion); //把问题字符串格式化
+        String rewrittenQuestion = rewriteQuestion(normalizedQuestion); //用大模型重写原问题
+        Set<String> candidates = new LinkedHashSet<>(); //重写后的问题 + 原问题
         candidates.add(rewrittenQuestion);
         candidates.add(normalizedQuestion);
 
-        SearchParams searchParams = resolveSearchParams(normalizedQuestion);
-        return new QueryContext(normalizedQuestion, new ArrayList<>(candidates), searchParams);
+        SearchParams searchParams = resolveSearchParams(normalizedQuestion); //根据问题决定搜索参数，包括topk和打分最低阈值
+        return new QueryContext(normalizedQuestion, new ArrayList<>(candidates), searchParams); //返回query的上下文，包含问题和搜索参数
     }
 
     private String normalizeQuestion(String question) {
         return question == null ? "" : question.trim();
     }
 
+    //检索相关的doc
     private List<Document> retrieveRelevantDocs(QueryContext queryContext, List<Long> knowledgeBaseIds) {
         for (String candidateQuery : queryContext.candidateQueries()) {
             if (candidateQuery.isBlank()) {
                 continue;
             }
+            // similaritySearch 返回的是“最多 topK 个、且满足阈值和过滤条件的、与 query 语义最相近的 Document”
             List<Document> docs = vectorService.similaritySearch(
                 candidateQuery,
                 knowledgeBaseIds,
@@ -272,9 +283,10 @@ public class KnowledgeBaseQueryService {
     }
 
     private SearchParams resolveSearchParams(String question) {
+        // 将 question 中所有空格、tab、换行等空白字符全部删掉，再计算剩余字符个数，并赋值给 compactLength。
         int compactLength = question.replaceAll("\\s+", "").length();
         if (compactLength <= shortQueryLength) {
-            return new SearchParams(topkShort, minScoreShort);
+            return new SearchParams(topkShort, minScoreShort); //短问题取向量库的向量个数更多，因为短问题信息少，语义不完整，所以放宽召回范围
         }
         if (compactLength <= 12) {
             return new SearchParams(topkMedium, minScoreDefault);
@@ -289,11 +301,11 @@ public class KnowledgeBaseQueryService {
         try {
             Map<String, Object> variables = new HashMap<>();
             variables.put("question", question);
-            String rewritePrompt = rewritePromptTemplate.render(variables);
+            String rewritePrompt = rewritePromptTemplate.render(variables); //render是把prompt中的对应key占位符替换为variables中的kv
             String rewritten = chatClient.prompt()
                 .user(rewritePrompt)
                 .call()
-                .content();
+                .content();//调用一次大模型，重写prompt
             if (rewritten == null || rewritten.isBlank()) {
                 return question;
             }
@@ -308,10 +320,12 @@ public class KnowledgeBaseQueryService {
 
     /**
      * 检索命中不等于可回答。
-     * 对短 token 场景增加一次命中确认，避免把弱相关片段交给模型后生成大段“信息不足说明”。
+     * 不是短 token 问题就直接命中;
+     * 对短 token 场景增加一次命中确认，就是检查该问题是否有在检索出的doc里出现;
+     * 避免把弱相关片段交给模型后生成大段“信息不足说明”。
      */
     private boolean hasEffectiveHit(String question, List<Document> docs) {
-        if (docs == null || docs.isEmpty()) {
+        if (docs == null || docs.isEmpty()) { // docs是检索出来的相关向量
             return false;
         }
 
@@ -332,6 +346,7 @@ public class KnowledgeBaseQueryService {
         return false;
     }
 
+    // 检查question的格式: 只能由“字母、数字、下划线、连字符”组成，且字符长度必须在 2 到 20 之间。也就是短问题的字符长度是2-20(一个中文算一个字符)
     private boolean isShortTokenQuery(String question) {
         if (question == null) {
             return false;
@@ -365,18 +380,27 @@ public class KnowledgeBaseQueryService {
      * - 非无信息：尽快释放缓冲并继续实时透传
      */
     private Flux<String> normalizeStreamOutput(Flux<String> rawFlux) {
-        return Flux.create(sink -> {
+        return Flux.create(sink -> { //新建了一个包装后的 Flux,加了拦截与修正
             StringBuilder probeBuffer = new StringBuilder();
+            /*
+            lambda 捕获的局部变量必须是必须是 final 或 effectively final
+            lambda 本质上会被编译成某个函数式接口抽象方法的实现。
+            当 lambda 使用方法中的局部变量时，它并不是直接持有这个局部变量本身，而是捕获它当时的值。
+            由于局部变量存活在当前方法的栈帧里，方法执行结束后该局部变量就不存在了，而 lambda 可能在之后才执行，所以它只能保存一个副本。
+            如果这个局部变量后面还允许变化，那么 lambda 中保存的值就会和外部变量的新值产生不一致，语义上会变得混乱。
+            因此，Java 要求被 lambda 捕获的局部变量必须是 final 或 effectively final。
+            AtomicBoolean本身不会变, 它是一个包装对象, 包装的的值会变
+             */
             AtomicBoolean passthrough = new AtomicBoolean(false);
             AtomicBoolean completed = new AtomicBoolean(false);
-            final Disposable[] disposableRef = new Disposable[1];
+            final Disposable[] disposableRef = new Disposable[1]; //这个也是,Disposable[]是不可变的,但是里面的元素可以变
 
-            disposableRef[0] = rawFlux.subscribe(
-                chunk -> {
-                    if (completed.get() || sink.isCancelled()) {
+            disposableRef[0] = rawFlux.subscribe( //rawFlux是一个发布者,
+                chunk -> { //订阅了如下的逻辑
+                    if (completed.get() || sink.isCancelled()) { //如果结束了或者这个flux被取消订阅了
                         return;
                     }
-                    if (passthrough.get()) {
+                    if (passthrough.get()) { //还在传输
                         sink.next(chunk);
                         return;
                     }
@@ -398,8 +422,8 @@ public class KnowledgeBaseQueryService {
                         sink.next(probeText);
                         probeBuffer.setLength(0);
                     }
-                },
-                sink::error,
+                }, //onNext
+                sink::error,//onError
                 () -> {
                     if (completed.get() || sink.isCancelled()) {
                         return;
@@ -408,7 +432,7 @@ public class KnowledgeBaseQueryService {
                         sink.next(normalizeAnswer(probeBuffer.toString()));
                     }
                     sink.complete();
-                }
+                }//onComplete
             );
 
             sink.onCancel(() -> {
@@ -419,10 +443,5 @@ public class KnowledgeBaseQueryService {
         });
     }
 
-    private record SearchParams(int topK, double minScore) {
-    }
-
-    private record QueryContext(String originalQuestion, List<String> candidateQueries, SearchParams searchParams) {
-    }
 }
 

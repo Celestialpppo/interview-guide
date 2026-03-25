@@ -23,14 +23,14 @@ public class FileHashService {
     private static final int BUFFER_SIZE = 8192;
 
     /**
-     * 计算文件的 SHA-256 哈希值
+     * 计算文件的 SHA-256 哈希值（小文件）
      *
      * @param file MultipartFile 文件
      * @return 十六进制哈希字符串
      */
     public String calculateHash(MultipartFile file) {
         try {
-            return calculateHash(file.getBytes());
+            return calculateHash(file.getBytes()); //getBytes() 的语义就是“把整个文件一次性装进内存”，所以只适合小文件
         } catch (IOException e) {
             log.error("读取文件内容失败: {}", e.getMessage());
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "计算文件哈希失败");
@@ -65,7 +65,7 @@ public class FileHashService {
             MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
             byte[] buffer = new byte[BUFFER_SIZE];
             int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
+            while ((bytesRead = inputStream.read(buffer)) != -1) { //读一个字节
                 digest.update(buffer, 0, bytesRead);
             }
             return bytesToHex(digest.digest());

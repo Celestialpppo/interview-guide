@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 @RequiredArgsConstructor
 public class VectorRepository {
-    
+    //直接使用JDBC来执行SQL
     private final JdbcTemplate jdbcTemplate;
     
     /**
@@ -32,9 +32,18 @@ public class VectorRepository {
         
         /* 
          * 注意：
-         * 1. metadata 字段是 json 类型，不支持 jsonb_exists 函数。
+         * 1. metadata 字段是 json 类型，不支持 jsonb_exists 函数。jsonb_exists 是一个 只针对 jsonb 的存在性检查函数。
          * 2. 使用 metadata->>'key' IS NOT NULL 来替代键存在性检查，这在 json/jsonb 下都有效。
+         *    分三步看：1.先从 metadata 里取字段 kb_id_long 2.取出来后变成文本text 3.判断这个结果是不是 NULL，是就返回true用于where判断
          * 3. 这种写法完全避开了 PostgreSQL 的 '?' 操作符，不会引起 JDBC 占位符冲突。
+         *    这里说的 ?，不是 SQL 里的参数占位符，而是 PostgreSQL 的一个 jsonb 存在性运算符，检查某个字符串是否存在于 JSONB 顶层 key 或数组元素中
+         *    但是SQL中的 ? 是 JDBC 的参数占位符，可能会识别错误。所以就不使用 PostgreSQL 的 ? 操作符，避免冲突。
+         */
+        /*
+            ->> 是 PostgreSQL 里取 JSON / JSONB 字段并返回文本（text） 的运算符。
+            jsonb 会把 JSON 转成分解后的二进制结构，提高查询效率。并且支持更多索引和专用运算符
+            ? 是 JDBC 预编译 SQL 的参数占位符。
+            ::bigint 是 PostgreSQL 的类型转换（cast）语法。
          */
         String sql = """
             DELETE FROM vector_store
@@ -44,6 +53,8 @@ public class VectorRepository {
         
         try {
             // 第一个参数转为 String 匹配 kb_id，第二个参数保持 Long 匹配 kb_id_long
+            // JdbcTemplate.update(...) 用于执行：
+            // INSERT, UPDATE, DELETE
             int deletedRows = jdbcTemplate.update(sql, knowledgeBaseId.toString(), knowledgeBaseId);
             
             if (deletedRows > 0) {

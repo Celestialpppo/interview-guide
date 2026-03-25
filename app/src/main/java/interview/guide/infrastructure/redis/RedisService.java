@@ -61,7 +61,7 @@ public class RedisService {
         RBucket<T> bucket = redissonClient.getBucket(key);
         T value = bucket.get();
         if (value == null) {
-            value = loader.apply(key);
+            value = loader.apply(key); //key的类型要对应Function<String, T> String
             if (value != null) {
                 bucket.set(value, ttl);
             }
@@ -142,9 +142,10 @@ public class RedisService {
     // ==================== 分布式锁 ====================
 
     /**
-     * 获取锁（阻塞等待）
+     * 获取锁对象
      */
     public RLock getLock(String lockKey) {
+        //根据 lockKey 拿到一个 RLock 对象引用。
         return redissonClient.getLock(lockKey);
     }
 
@@ -154,6 +155,7 @@ public class RedisService {
     public boolean tryLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit) {
         RLock lock = redissonClient.getLock(lockKey);
         try {
+            //会去竞争这把锁，最多等待 waitTime；如果拿到锁，锁的自动释放时间是 leaseTime
             return lock.tryLock(waitTime, leaseTime, unit);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -231,11 +233,11 @@ public class RedisService {
 
         // 使用阻塞读取，让 Redis 服务端等待消息
         Map<StreamMessageId, Map<String, String>> messages = stream.readGroup(
-            groupName,
-            consumerName,
-            StreamReadGroupArgs.neverDelivered()
-                .count(count)
-                .timeout(Duration.ofMillis(blockTimeoutMs))
+                groupName,                                           // 消费者组名
+                consumerName,                                        // 消费者名称
+                StreamReadGroupArgs.neverDelivered()                 // 读取策略：从未投递的消息
+                        .count(count)                                    // 批量读取数量
+                        .timeout(Duration.ofMillis(blockTimeoutMs))      // 阻塞超时时间
         );
 
         if (messages == null || messages.isEmpty()) {
@@ -284,6 +286,8 @@ public class RedisService {
         RStream<String, String> stream = redissonClient.getStream(streamKey, StringCodec.INSTANCE);
         StreamAddArgs<String, String> args = StreamAddArgs.entries(message);
         if (maxLen > 0) {
+            //因为 Stream 默认只追加，不会自动无限清理。
+            //trimNonStrict() 表示非严格修剪，即如果 Stream 长度超过 maxLen，会删除最旧的消息。
             args.trimNonStrict().maxLen(maxLen);
         }
         StreamMessageId messageId = stream.add(args);

@@ -302,25 +302,27 @@ public class InterviewPersistenceService {
     public List<String> getHistoricalQuestionsByResumeId(Long resumeId) {
         // 只查询最近的 10 个会话，避免加载过多历史数据
         List<InterviewSessionEntity> sessions = sessionRepository.findTop10ByResumeIdOrderByCreatedAtDesc(resumeId);
-        
+
+        //InterviewSessionEntity -> getQuestionsJson (string) -> InterviewQuestionDTO -> InterviewQuestionDTO.question (string)
+        // -> 去重、截断 -> questionList
         return sessions.stream()
-            .map(InterviewSessionEntity::getQuestionsJson)
-            .filter(json -> json != null && !json.isEmpty())
-            .flatMap(json -> {
+            .map(InterviewSessionEntity::getQuestionsJson)//得到每个实体的问题Json字符串
+            .filter(json -> json != null && !json.isEmpty())//过滤
+            .flatMap(json -> { //返回的是一个Stream<String>，flatmap的作用是把stream去掉，变为String
                 try {
                     List<InterviewQuestionDTO> questions = objectMapper.readValue(json, 
-                        new TypeReference<List<InterviewQuestionDTO>>() {});
+                        new TypeReference<>() {}); //先把一个 JSON 反序列化成InterviewQuestionDTO
                     // 过滤掉追问，只保留主问题作为历史参考
                     return questions.stream()
-                        .filter(q -> !q.isFollowUp())
-                        .map(InterviewQuestionDTO::question);
+                        .filter(q -> !q.isFollowUp()) //过滤追问
+                        .map(InterviewQuestionDTO::question);//Stream<String>,包含InterviewQuestionDTO::question
                 } catch (Exception e) {
                     log.error("解析历史问题JSON失败", e);
                     return java.util.stream.Stream.empty();
                 }
             })
-            .distinct()
+            .distinct()//字符串去重
             .limit(30) // 核心改动：只保留最近的 30 道题
-            .toList();
+            .toList(); // 返回一个 List<String>
     }
 }

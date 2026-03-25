@@ -40,11 +40,11 @@ public class InterviewSessionService {
      * 注意：如果已有未完成的会话，不会创建新的，而是返回现有会话
      * 前端应该先调用 findUnfinishedSession 检查，或者使用 forceCreate 参数强制创建
      */
-    public InterviewSessionDTO createSession(CreateInterviewRequest request) {
+    public InterviewSessionDTO createSession(CreateInterviewRequestDTO request) {
         // 如果指定了resumeId且未强制创建，检查是否有未完成的会话
         if (request.resumeId() != null && !Boolean.TRUE.equals(request.forceCreate())) {
             Optional<InterviewSessionDTO> unfinishedOpt = findUnfinishedSession(request.resumeId());
-            if (unfinishedOpt.isPresent()) {
+            if (unfinishedOpt.isPresent()) { //用来判断：这个 Optional 里面有没有值。
                 log.info("检测到未完成的面试会话，返回现有会话: resumeId={}, sessionId={}",
                     request.resumeId(), unfinishedOpt.get().sessionId());
                 return unfinishedOpt.get();
@@ -124,10 +124,10 @@ public class InterviewSessionService {
     public Optional<InterviewSessionDTO> findUnfinishedSession(Long resumeId) {
         try {
             // 1. 先从 Redis 缓存查找
-            Optional<String> cachedSessionIdOpt = sessionCache.findUnfinishedSessionId(resumeId);
+            Optional<String> cachedSessionIdOpt = sessionCache.findUnfinishedSessionId(resumeId); //根据简历id，在缓存中找未完成的会话，如果已完成这里会删除key
             if (cachedSessionIdOpt.isPresent()) {
                 String sessionId = cachedSessionIdOpt.get();
-                Optional<CachedSession> cachedOpt = sessionCache.getSession(sessionId);
+                Optional<CachedSession> cachedOpt = sessionCache.getSession(sessionId);//key: interview:session:_sessionId，这是会话id
                 if (cachedOpt.isPresent()) {
                     log.debug("从 Redis 缓存找到未完成会话: resumeId={}, sessionId={}", resumeId, sessionId);
                     return Optional.of(toDTO(cachedOpt.get()));

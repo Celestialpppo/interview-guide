@@ -42,15 +42,16 @@ public class ResumePersistenceService {
      * @param file 上传的文件
      * @return 如果存在返回已有的简历实体，否则返回空
      */
+    @Transactional
     public Optional<ResumeEntity> findExistingResume(MultipartFile file) {
         try {
-            String fileHash = fileHashService.calculateHash(file);
-            Optional<ResumeEntity> existing = resumeRepository.findByFileHash(fileHash);
+            String fileHash = fileHashService.calculateHash(file); //计算文件的 SHA-256 哈希值
+            Optional<ResumeEntity> existing = resumeRepository.findByFileHash(fileHash);//通过hash来找文件
             
             if (existing.isPresent()) {
                 log.info("检测到重复简历: hash={}", fileHash);
                 ResumeEntity resume = existing.get();
-                resume.incrementAccessCount();
+                resume.incrementAccessCount(); //把重复简历个数加一
                 resumeRepository.save(resume);
             }
             

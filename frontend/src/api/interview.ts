@@ -1,6 +1,6 @@
 import { request } from './request';
 import type {
-  CreateInterviewRequest,
+  CreateInterviewRequestDTO,
   CurrentQuestionResponse,
   InterviewReport,
   InterviewSession,
@@ -12,7 +12,7 @@ export const interviewApi = {
   /**
    * 创建面试会话
    */
-  async createSession(req: CreateInterviewRequest): Promise<InterviewSession> {
+  async createSession(req: CreateInterviewRequestDTO): Promise<InterviewSession> {
     return request.post<InterviewSession>('/api/interview/sessions', req, {
       timeout: 180000, // 3分钟超时，AI生成问题需要时间
     });
