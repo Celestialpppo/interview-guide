@@ -173,12 +173,13 @@ public class InterviewPersistenceService {
             session.setStatus(InterviewSessionEntity.SessionStatus.EVALUATED);
             session.setCompletedAt(LocalDateTime.now());
 
-            sessionRepository.save(session);
+            sessionRepository.save(session); //会话表存整场总结。
 
             // 查询已存在的答案，建立索引
             List<InterviewAnswerEntity> existingAnswers = answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId);
             java.util.Map<Integer, InterviewAnswerEntity> answerMap = existingAnswers.stream()
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(java.util.stream.Collectors.toMap( //把流里的元素收集起来，最后变成别的容器（map）
+                        //toMap(keyMapper, valueMapper, mergeFunction)
                     InterviewAnswerEntity::getQuestionIndex,
                     a -> a,
                     (a1, a2) -> a1

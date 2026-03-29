@@ -118,7 +118,7 @@ public class KnowledgeBaseQueryService {
         countService.updateQuestionCounts(knowledgeBaseIds);
 
         // 2. Query rewrite + 动态参数检索（RAG）
-        QueryContext queryContext = buildQueryContext(question); //根据问题来构造query上下文
+        QueryContext queryContext = buildQueryContext(question);
         List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds); //拿到检索过后相似的向量所对应的内容
 
         if (!hasEffectiveHit(question, relevantDocs)) {
@@ -134,7 +134,7 @@ public class KnowledgeBaseQueryService {
 
         // 4. 构建提示词
         String systemPrompt = buildSystemPrompt();
-        String userPrompt = buildUserPrompt(context, question); //实际上也就是把检索出来的文本片段加入提示词罢了,因为大模型是个黑箱
+        String userPrompt = buildUserPrompt(context, question);
 
         try {
             // 5. 调用AI生成回答
@@ -205,7 +205,7 @@ public class KnowledgeBaseQueryService {
             countService.updateQuestionCounts(knowledgeBaseIds);
 
             // 2. Query rewrite + 动态参数检索
-            QueryContext queryContext = buildQueryContext(question);
+            QueryContext queryContext = buildQueryContext(question);//根据问题来构造query上下文，包含原始问题、重写过的问题、和根据原始问题长短生成的参数：问题长返回的相关文档topK就少，最低分阈值就低，反之就多；
             List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds);
 
             if (!hasEffectiveHit(question, relevantDocs)) {
@@ -223,7 +223,7 @@ public class KnowledgeBaseQueryService {
 
             // 4. 构建提示词
             String systemPrompt = buildSystemPrompt();
-            String userPrompt = buildUserPrompt(context, question);
+            String userPrompt = buildUserPrompt(context, question);//实际上也就是把检索出来的文本片段加入提示词罢了,因为大模型是个黑箱
 
             // 5. 流式调用 + 探测窗口归一化：既保留流式速度，又避免无信息长文
             Flux<String> responseFlux = chatClient.prompt()
@@ -294,6 +294,7 @@ public class KnowledgeBaseQueryService {
         return new SearchParams(topkLong, minScoreDefault);
     }
 
+    //让大模型决定是否是需要改写
     private String rewriteQuestion(String question) {
         if (!rewriteEnabled || question.isBlank()) {
             return question;
@@ -320,8 +321,7 @@ public class KnowledgeBaseQueryService {
 
     /**
      * 检索命中不等于可回答。
-     * 不是短 token 问题就直接命中;
-     * 对短 token 场景增加一次命中确认，就是检查该问题是否有在检索出的doc里出现;
+     * 对短 token 场景增加一次命中确认，如果是短token，就再检查该问题是否有在检索出的doc里出现;
      * 避免把弱相关片段交给模型后生成大段“信息不足说明”。
      */
     private boolean hasEffectiveHit(String question, List<Document> docs) {

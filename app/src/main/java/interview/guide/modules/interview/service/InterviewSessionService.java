@@ -22,6 +22,13 @@ import java.util.UUID;
 /**
  * 面试会话管理服务
  * 管理面试会话的生命周期，使用 Redis 缓存会话状态
+ * InterviewQuestionDTO 面试的原始题目数据。
+ * InterviewReportDTO 一整场面试的最终报告。包含：
+ *  - List<QuestionEvaluation>表示每一道题最后展示/保存时用的题目评估结果。
+ *  - List<ReferenceAnswer>表示每道题对应的参考答案和关键点。
+ * InterviewSessionEntity 一整场面试会话的数据库实体。
+ * InterviewAnswerEntity 单道题答案的数据库实体。
+ *
  */
 @Slf4j
 @Service

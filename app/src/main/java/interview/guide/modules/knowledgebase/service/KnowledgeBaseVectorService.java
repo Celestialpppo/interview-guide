@@ -101,7 +101,7 @@ public class KnowledgeBaseVectorService {
             }
 
             if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
-                builder.filterExpression(buildKbFilterExpression(knowledgeBaseIds));
+                builder.filterExpression(buildKbFilterExpression(knowledgeBaseIds)); //前置过滤！！过滤掉metadata中kb_id不属于knowledgeBaseIds的文档
             }
 
             // 拿用户的查询文本去向量库里做相似度检索，返回一组最相关的 Document。
@@ -137,8 +137,8 @@ public class KnowledgeBaseVectorService {
 
             if (knowledgeBaseIds != null && !knowledgeBaseIds.isEmpty()) {
                 allResults = allResults.stream()
-                    .filter(doc -> isDocInKnowledgeBases(doc, knowledgeBaseIds))
-                    .collect(Collectors.toList());
+                    .filter(doc -> isDocInKnowledgeBases(doc, knowledgeBaseIds)) //过滤不是知识库的文档片段，后置过滤！！
+                    .toList();
             }
 
             List<Document> results = allResults.stream()

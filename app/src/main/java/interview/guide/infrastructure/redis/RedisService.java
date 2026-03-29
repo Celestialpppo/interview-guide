@@ -20,6 +20,9 @@ import java.util.function.Function;
 /**
  * Redis 服务封装
  * 提供通用的 Redis 操作，包括缓存、分布式锁、Stream 消息队列等
+ * interview:session:{sessionId} 面试会话缓存
+ * interview:resume:{resumeId} 简历到未完成会话的映射
+ *
  */
 @Slf4j
 @Service
@@ -231,11 +234,17 @@ public class RedisService {
 
         RStream<String, String> stream = redissonClient.getStream(streamKey, StringCodec.INSTANCE);
 
-        // 使用阻塞读取，让 Redis 服务端等待消息
-        Map<StreamMessageId, Map<String, String>> messages = stream.readGroup(
+        // 使用阻塞读取，让 Redis 服务端等待消息。客户端以“某个组里的某个消费者”的身份，直接向 Redis 领取消息。
+        /*
+          消费者组主要维护三类信息：
+            1.组级别状态：组名, last-delivered-id：这个组上次投递到哪条消息了,lag：还有多少消息尚未投递给这个组。
+            2.消费者信息：组里有哪些消费者、每个消费者待处理多少消息
+            3.Pending Entries List, PEL：消息投递给消费者之后，存放未ack的消费者状态信息
+         */
+        Map<StreamMessageId, Map<String, String>> messages = stream.readGroup( //StreamMessageId消息id，Map<String, String>某一条消息的业务内容
                 groupName,                                           // 消费者组名
                 consumerName,                                        // 消费者名称
-                StreamReadGroupArgs.neverDelivered()                 // 读取策略：从未投递的消息
+                StreamReadGroupArgs.neverDelivered()                 // 读取策略：定义读取消息的时候，读取从未投递给这个消费者组的消息
                         .count(count)                                    // 批量读取数量
                         .timeout(Duration.ofMillis(blockTimeoutMs))      // 阻塞超时时间
         );
