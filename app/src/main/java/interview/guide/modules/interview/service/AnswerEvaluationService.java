@@ -47,14 +47,16 @@ public class AnswerEvaluationService {
     private final int evaluationBatchSize;
     
     // 中间DTO用于接收AI响应
+    //单批评估 DTO
     private record EvaluationReportDTO(
         int overallScore,
         String overallFeedback,
-        List<String> strengths,
-        List<String> improvements,
+        List<String> strengths, //表示这一批回答整体的几个优点
+        List<String> improvements,// 表示这一批回答整体的几个改进建议
         List<QuestionEvaluationDTO> questionEvaluations
     ) {}
-    
+
+    //单题评估 DTO
     private record QuestionEvaluationDTO(
         int questionIndex,
         int score,
@@ -63,12 +65,14 @@ public class AnswerEvaluationService {
         List<String> keyPoints
     ) {}
 
+    //批次包装 DTO
     private record BatchEvaluationResult(
         int startIndex,
         int endIndex,
         EvaluationReportDTO report
     ) {}
 
+    //最终总结 DTO
     private record FinalSummaryDTO(
         String overallFeedback,
         List<String> strengths,
@@ -108,13 +112,14 @@ public class AnswerEvaluationService {
                 : resumeText;
 
             // 分批评估，避免单次上下文过大导致 token 超限
+            // 调用大模型，对questions分批次，没一个批次返回一个BatchEvaluationResult，包含这个批次所有问题的QuestionEvaluationDTO
             List<BatchEvaluationResult> batchResults = evaluateInBatches(sessionId, resumeSummary, questions);
 
             List<QuestionEvaluationDTO> mergedEvaluations = mergeQuestionEvaluations(batchResults);
-            String fallbackOverallFeedback = mergeOverallFeedback(batchResults);
-            List<String> fallbackStrengths = mergeListItems(batchResults, true);
+            String fallbackOverallFeedback = mergeOverallFeedback(batchResults); //对每一个批次的几个问题的总体反馈的简单拼接
+            List<String> fallbackStrengths = mergeListItems(batchResults, true); //把每一个batch的优点加入LinkedHashSet然后返回前八个
             List<String> fallbackImprovements = mergeListItems(batchResults, false);
-            FinalSummaryDTO finalSummary = summarizeBatchResults(
+            FinalSummaryDTO finalSummary = summarizeBatchResults( //再次调用大模型进行全局总结
                 sessionId,
                 resumeSummary,
                 questions,
@@ -143,7 +148,9 @@ public class AnswerEvaluationService {
                 "面试评估失败：" + e.getMessage());
         }
     }
-    
+
+
+    //=================================== 私有方法 ========================================
     /**
      * 构建问答记录字符串
      */
@@ -250,7 +257,7 @@ public class AnswerEvaluationService {
     private List<String> mergeListItems(List<BatchEvaluationResult> batchResults, boolean strengthsMode) {
         Set<String> merged = new LinkedHashSet<>();
         for (BatchEvaluationResult result : batchResults) {
-            EvaluationReportDTO report = result.report();
+            EvaluationReportDTO report = result.report(); //record 对象可以直接用 成员名() 访问
             if (report == null) {
                 continue;
             }
@@ -265,7 +272,7 @@ public class AnswerEvaluationService {
         }
         return merged.stream().limit(8).toList();
     }
-
+    //把前面分批评估出来的结果，再统一做一次总总结，生成最终的 overallFeedback、strengths、improvements。
     private FinalSummaryDTO summarizeBatchResults(
         String sessionId,
         String resumeSummary,
@@ -279,8 +286,8 @@ public class AnswerEvaluationService {
             String summarySystemPrompt = summarySystemPromptTemplate.render();
             Map<String, Object> variables = new HashMap<>();
             variables.put("resumeText", resumeSummary);
-            variables.put("categorySummary", buildCategorySummary(questions, evaluations));
-            variables.put("questionHighlights", buildQuestionHighlights(questions, evaluations));
+            variables.put("categorySummary", buildCategorySummary(questions, evaluations)); // 按题目类别统计分数，算出每一类的平均分和题目数量，然后拼成一段总结文字。
+            variables.put("questionHighlights", buildQuestionHighlights(questions, evaluations)); // 按每一道题提取关键信息，把题号、题目、分数、反馈拼成一段简短文字。
             variables.put("fallbackOverallFeedback", fallbackOverallFeedback);
             variables.put("fallbackStrengths", String.join("\n", fallbackStrengths));
             variables.put("fallbackImprovements", String.join("\n", fallbackImprovements));

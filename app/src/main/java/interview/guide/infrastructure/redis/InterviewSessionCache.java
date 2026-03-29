@@ -74,7 +74,8 @@ public class InterviewSessionCache {
 
         public List<InterviewQuestionDTO> getQuestions(ObjectMapper objectMapper) {
             try {
-                return objectMapper.readValue(questionsJson, new TypeReference<>() {});
+                //反序列化
+                return objectMapper.readValue(questionsJson, new TypeReference<List<InterviewQuestionDTO>>() {});
             } catch (JacksonException e) {
                 throw new RuntimeException("反序列化问题列表失败", e);
             }
@@ -94,7 +95,7 @@ public class InterviewSessionCache {
 
         redisService.set(key, cachedSession, SESSION_TTL);
 
-        // 如果有 resumeId，建立映射关系（用于查找未完成会话）
+        // 如果有 resumeId，将简历id与会话id建立映射关系（用于查找未完成会话）
         // 这里保存的都是未完成的session！！！通过简历id查询的是未完成的session！！！
         if (resumeId != null && isUnfinishedStatus(status)) {
             saveResumeSessionMapping(resumeId, sessionId);

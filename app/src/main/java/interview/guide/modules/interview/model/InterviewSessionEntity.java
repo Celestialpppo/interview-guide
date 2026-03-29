@@ -70,7 +70,9 @@ public class InterviewSessionEntity {
     @Column(columnDefinition = "TEXT")
     private String referenceAnswersJson;
     
-    // 面试答案记录
+    // 面试答案记录，一个 InterviewSessionEntity 对应多个 InterviewSessionEntity
+    // cascade = CascadeType.ALL对 InterviewSessionEntity 做持久化操作时，相关的 InterviewAnswerEntity 也跟着一起处理。
+    // orphanRemoval = true 如果某个 InterviewAnswerEntity 已经从这个 session.answers 集合里移除了，而且它不再属于这个 session，那它会被删除。
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InterviewAnswerEntity> answers = new ArrayList<>();
     
