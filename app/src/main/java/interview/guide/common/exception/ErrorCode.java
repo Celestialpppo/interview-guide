@@ -16,6 +16,7 @@ public enum ErrorCode {
     UNAUTHORIZED(401, "未授权"),
     FORBIDDEN(403, "禁止访问"),
     NOT_FOUND(404, "资源不存在"),
+    METHOD_NOT_ALLOWED(405, "请求方法不支持"),
     INTERNAL_ERROR(500, "服务器内部错误"),
     
     // ========== 简历模块错误 2xxx ==========

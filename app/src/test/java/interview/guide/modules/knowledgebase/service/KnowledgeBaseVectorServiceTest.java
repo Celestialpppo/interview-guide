@@ -9,6 +9,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -116,6 +118,36 @@ class KnowledgeBaseVectorServiceTest {
             metadata.put("kb_id", invalidKbId);
         }
         return new Document("无效 kb_id 文档", metadata);
+    }
+
+    /**
+     * 创建一个支持过滤的 Mock Answer
+     * 简化版本：仅用于测试，手动过滤结果
+     * @param allDocuments 所有文档
+     * @param allowedKbIds 允许的 kb_id 列表（如果为 null，则返回所有文档）
+     */
+    private static List<Document> filterDocuments(List<Document> allDocuments, List<Long> allowedKbIds) {
+        if (allowedKbIds == null || allowedKbIds.isEmpty()) {
+            return allDocuments;
+        }
+
+        return allDocuments.stream()
+            .filter(doc -> {
+                Object kbId = doc.getMetadata().get("kb_id");
+                if (kbId == null) {
+                    return false;
+                }
+                String kbIdStr = kbId.toString();
+                // 处理 Long 类型 kb_id
+                try {
+                    Long kbIdLong = Long.parseLong(kbIdStr);
+                    return allowedKbIds.contains(kbIdLong);
+                } catch (NumberFormatException e) {
+                    // String 类型 kb_id，尝试匹配
+                    return allowedKbIds.stream().anyMatch(id -> id.toString().equals(kbIdStr));
+                }
+            })
+            .collect(java.util.stream.Collectors.toList());
     }
 
     // ==================== 测试类 ====================
@@ -256,14 +288,14 @@ class KnowledgeBaseVectorServiceTest {
             int topK = 5;
 
             List<Document> mockResults = createMockDocuments(10, null);
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(mockResults);
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, null, topK);
+            List<Document> results = vectorService.similaritySearch(query, null, topK, 0.0);
 
             // Then
             assertEquals(topK, results.size(), "应该返回 topK 个结果");
-            verify(vectorStore, times(1)).similaritySearch(query);
+            verify(vectorStore, times(1)).similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class));
         }
 
         @Test
@@ -275,15 +307,19 @@ class KnowledgeBaseVectorServiceTest {
             int topK = 10;
 
             // 创建混合的搜索结果（包含不同 kb_id）
-            List<Document> mockResults = new ArrayList<>();
-            mockResults.addAll(createMockDocuments(3, "1"));  // kb_id = "1"
-            mockResults.addAll(createMockDocuments(3, "2"));  // kb_id = "2"
-            mockResults.addAll(createMockDocuments(4, "3"));  // kb_id = "3" (应被过滤)
+            List<Document> allMockResults = new ArrayList<>();
+            allMockResults.addAll(createMockDocuments(3, "1"));  // kb_id = "1"
+            allMockResults.addAll(createMockDocuments(3, "2"));  // kb_id = "2"
+            allMockResults.addAll(createMockDocuments(4, "3"));  // kb_id = "3" (应被过滤)
 
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class)))
+                .thenAnswer(invocation -> {
+                    // 模拟：根据 knowledge base IDs 过滤结果
+                    return filterDocuments(allMockResults, knowledgeBaseIds);
+                });
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, topK);
+            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, topK, 0.0);
 
             // Then: 只返回 kb_id 为 1 或 2 的文档
             assertEquals(6, results.size(), "应该只返回匹配知识库ID的文档");
@@ -304,15 +340,16 @@ class KnowledgeBaseVectorServiceTest {
             int topK = 5;
 
             // 创建使用 Long 类型 kb_id 的文档（模拟旧数据）
-            List<Document> mockResults = new ArrayList<>();
-            mockResults.add(createDocumentWithLongKbId(100L));
-            mockResults.add(createDocumentWithLongKbId(100L));
-            mockResults.add(createDocumentWithLongKbId(200L)); // 应被过滤
+            List<Document> allMockResults = new ArrayList<>();
+            allMockResults.add(createDocumentWithLongKbId(100L));
+            allMockResults.add(createDocumentWithLongKbId(100L));
+            allMockResults.add(createDocumentWithLongKbId(200L)); // 应被过滤
 
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class)))
+                .thenAnswer(invocation -> filterDocuments(allMockResults, knowledgeBaseIds));
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, topK);
+            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, topK, 0.0);
 
             // Then
             assertEquals(2, results.size(), "应该只返回 kb_id=100 的文档");
@@ -326,10 +363,10 @@ class KnowledgeBaseVectorServiceTest {
             int topK = 3;
 
             List<Document> mockResults = createMockDocuments(10, "1");
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(mockResults);
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, List.of(1L), topK);
+            List<Document> results = vectorService.similaritySearch(query, List.of(1L), topK, 0.0);
 
             // Then
             assertEquals(topK, results.size(), "结果数量应该被 topK 限制");
@@ -340,13 +377,13 @@ class KnowledgeBaseVectorServiceTest {
         void testSearchFailureThrowsException() {
             // Given
             String query = "测试";
-            when(vectorStore.similaritySearch(anyString()))
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class)))
                 .thenThrow(new RuntimeException("搜索服务不可用"));
 
             // When & Then
             RuntimeException exception = assertThrows(
                 RuntimeException.class,
-                () -> vectorService.similaritySearch(query, null, 5)
+                () -> vectorService.similaritySearch(query, null, 5, 0.0)
             );
 
             assertTrue(exception.getMessage().contains("向量搜索失败"));
@@ -361,10 +398,10 @@ class KnowledgeBaseVectorServiceTest {
             int topK = 5;
 
             List<Document> mockResults = createMockDocuments(10, "1");
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(mockResults);
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, emptyList, topK);
+            List<Document> results = vectorService.similaritySearch(query, emptyList, topK, 0.0);
 
             // Then: 空列表应该返回所有结果（受 topK 限制）
             assertEquals(topK, results.size());
@@ -375,10 +412,10 @@ class KnowledgeBaseVectorServiceTest {
         void testSearchReturnsEmpty() {
             // Given
             String query = "不存在的内容";
-            when(vectorStore.similaritySearch(query)).thenReturn(List.of());
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(List.of());
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, null, 10);
+            List<Document> results = vectorService.similaritySearch(query, null, 10, 0.0);
 
             // Then
             assertTrue(results.isEmpty(), "搜索结果应该为空");
@@ -391,11 +428,12 @@ class KnowledgeBaseVectorServiceTest {
             String query = "测试";
             List<Long> knowledgeBaseIds = List.of(999L); // 不存在的 kb_id
 
-            List<Document> mockResults = createMockDocuments(5, "1");
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            List<Document> allMockResults = createMockDocuments(5, "1");
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class)))
+                .thenAnswer(invocation -> filterDocuments(allMockResults, knowledgeBaseIds));
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, 10);
+            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, 10, 0.0);
 
             // Then
             assertTrue(results.isEmpty(), "没有匹配的知识库ID，结果应为空");
@@ -409,15 +447,16 @@ class KnowledgeBaseVectorServiceTest {
             List<Long> knowledgeBaseIds = List.of(1L);
 
             // 创建包含无效 kb_id 的文档
-            List<Document> mockResults = new ArrayList<>();
-            mockResults.add(createDocumentWithInvalidKbId("not_a_number"));
-            mockResults.add(createDocumentWithInvalidKbId(null));
-            mockResults.addAll(createMockDocuments(2, "1")); // 有效的文档
+            List<Document> allMockResults = new ArrayList<>();
+            allMockResults.add(createDocumentWithInvalidKbId("not_a_number"));
+            allMockResults.add(createDocumentWithInvalidKbId(null));
+            allMockResults.addAll(createMockDocuments(2, "1")); // 有效的文档
 
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class)))
+                .thenAnswer(invocation -> filterDocuments(allMockResults, knowledgeBaseIds));
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, 10);
+            List<Document> results = vectorService.similaritySearch(query, knowledgeBaseIds, 10, 0.0);
 
             // Then: 无效的 kb_id 应该被过滤掉，只返回有效的
             assertEquals(2, results.size(), "只应返回有效 kb_id 的文档");
@@ -510,10 +549,10 @@ class KnowledgeBaseVectorServiceTest {
         void testEmptyQuery() {
             // Given
             String emptyQuery = "";
-            when(vectorStore.similaritySearch(emptyQuery)).thenReturn(List.of());
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(List.of());
 
             // When
-            List<Document> results = vectorService.similaritySearch(emptyQuery, null, 5);
+            List<Document> results = vectorService.similaritySearch(emptyQuery, null, 5, 0.0);
 
             // Then
             assertTrue(results.isEmpty());
@@ -525,10 +564,10 @@ class KnowledgeBaseVectorServiceTest {
             // Given
             String query = "测试";
             List<Document> mockResults = createMockDocuments(5);
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(mockResults);
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, null, 0);
+            List<Document> results = vectorService.similaritySearch(query, null, 0, 0.0);
 
             // Then
             assertTrue(results.isEmpty(), "topK=0 应该返回空结果");
@@ -541,10 +580,10 @@ class KnowledgeBaseVectorServiceTest {
             String query = "测试";
             int topK = 100;
             List<Document> mockResults = createMockDocuments(5);
-            when(vectorStore.similaritySearch(query)).thenReturn(mockResults);
+            when(vectorStore.similaritySearch(any(org.springframework.ai.vectorstore.SearchRequest.class))).thenReturn(mockResults);
 
             // When
-            List<Document> results = vectorService.similaritySearch(query, null, topK);
+            List<Document> results = vectorService.similaritySearch(query, null, topK, 0.0);
 
             // Then
             assertEquals(5, results.size(), "应该返回所有可用结果");

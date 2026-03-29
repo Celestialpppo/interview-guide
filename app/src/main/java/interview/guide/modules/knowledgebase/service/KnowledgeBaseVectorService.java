@@ -106,9 +106,14 @@ public class KnowledgeBaseVectorService {
             if (results == null) {
                 return List.of();
             }
-            
-            log.info("搜索完成: 找到 {} 个相关文档", results.size());
-            return results;
+
+            // Apply topK limiting in case VectorStore returns more than requested
+            List<Document> limitedResults = results.stream()
+                .limit(topK)
+                .collect(Collectors.toList());
+
+            log.info("搜索完成: 找到 {} 个相关文档", limitedResults.size());
+            return limitedResults;
             
         } catch (Exception e) {
             log.warn("向量搜索前置过滤失败，回退到本地过滤: {}", e.getMessage());

@@ -13,6 +13,8 @@ const InterviewHistoryPage = lazy(() => import('./pages/InterviewHistoryPage'));
 const KnowledgeBaseQueryPage = lazy(() => import('./pages/KnowledgeBaseQueryPage'));
 const KnowledgeBaseUploadPage = lazy(() => import('./pages/KnowledgeBaseUploadPage'));
 const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePage'));
+const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
+const VoiceInterviewHistoryPage = lazy(() => import('./pages/VoiceInterviewHistoryPage'));
 
 // Loading component
 const Loading = () => (
@@ -165,9 +167,15 @@ function App() {
             {/* 知识库上传 */}
             <Route path="knowledgebase/upload" element={<KnowledgeBaseUploadPageWrapper />} />
 
+            {/* 语音面试历史 */}
+            <Route path="voice-interview/history" element={<VoiceInterviewHistoryPage />} />
+
             {/* 问答助手（知识库聊天） */}
             <Route path="knowledgebase/chat" element={<KnowledgeBaseQueryPageWrapper />} />
           </Route>
+
+          {/* 语音面试 (Fullscreen, outside of Layout) */}
+          <Route path="voice-interview" element={<VoiceInterviewPageWrapper />} />
         </Routes>
       </Suspense>
     </BrowserRouter>
@@ -254,6 +262,21 @@ function KnowledgeBaseUploadPageWrapper() {
   };
 
   return <KnowledgeBaseUploadPage onUploadComplete={handleUploadComplete} onBack={handleBack} />;
+}
+
+// 语音面试页面包装器
+function VoiceInterviewPageWrapper() {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const role = searchParams.get('role');
+
+  if (!role) {
+    return <Navigate to="/upload" replace />;
+  }
+
+  return (
+    <VoiceInterviewPage />
+  );
 }
 
 export default App;

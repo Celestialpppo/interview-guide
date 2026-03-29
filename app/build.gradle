@@ -25,6 +25,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
     // PostgreSQL
     runtimeOnly 'org.postgresql:postgresql'
@@ -51,6 +52,23 @@ dependencies {
     implementation "com.itextpdf:itext-core:${libs.versions.itext.get()}"
     implementation "com.itextpdf:font-asian:${libs.versions.itext.get()}"
 
+    // Aliyun NLS SDK Common (for AccessToken)
+    implementation 'com.alibaba.nls:nls-sdk-common:2.2.1'
+
+    // Aliyun Real-time ASR SDK for Speech-to-Text (transcriber for continuous streaming)
+    implementation 'com.alibaba.nls:nls-sdk-transcriber:2.2.1'
+
+    // Aliyun TTS SDK for Text-to-Speech
+    implementation 'com.alibaba.nls:nls-sdk-tts:2.2.1'
+
+    // JAXB API for Java 9+ (required by Aliyun NLS SDK)
+    // Use javax.xml.bind instead of jakarta.xml.bind for compatibility
+    implementation 'javax.xml.bind:jaxb-api:2.3.1'
+    implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.9'
+
+    // Jakarta annotation for Java 21+ (replaces javax.annotation)
+    implementation 'jakarta.annotation:jakarta.annotation-api:2.1.1'
+
     // Lombok
     compileOnly libs.lombok
     annotationProcessor libs.lombok
@@ -74,4 +92,27 @@ java {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// 将仓库根目录 .env 注入 bootRun，便于本地加载 AI_BAILIAN_API_KEY 等变量（Gradle 进程默认不读 .env）
+tasks.named('bootRun') {
+    def envFile = rootProject.file('.env')
+    if (envFile.exists()) {
+        envFile.eachLine { line ->
+            def trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith('#')) {
+                return
+            }
+            def eq = trimmed.indexOf('=')
+            if (eq <= 0) {
+                return
+            }
+            def key = trimmed.substring(0, eq).trim()
+            def val = trimmed.substring(eq + 1).trim()
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.substring(1, val.length() - 1)
+            }
+            environment key, val
+        }
+    }
 }
