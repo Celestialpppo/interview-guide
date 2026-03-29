@@ -152,23 +152,32 @@ app:
     tts:
       default-voice: ${APP_VOICE_INTERVIEW_TTS_DEFAULT_VOICE:siyue}  # 思悦 - 温柔自然的女声
 
-    # Aliyun voice services
-    aliyun:
-      stt:
-        url: ${ALIYUN_STT_URL:wss://nls-gateway-cn-shanghai.aliyuncs.com/ws}
-        app-key: ${ALIYUN_STT_APP_KEY:}
-        access-key-id: ${ALIYUN_ACCESS_KEY_ID:}
-        access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:}
-        format: ${ALIYUN_STT_FORMAT:pcm}
-        sample-rate: ${ALIYUN_STT_SAMPLE_RATE:16000}
+    # Qwen3 Realtime ASR Configuration
+    qwen:
+      asr:
+        url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime
+        model: qwen3-asr-flash-realtime
+        api-key: ${AI_BAILIAN_API_KEY}
+        language: zh
+        format: pcm
+        sample-rate: 16000
+        enable-turn-detection: true
+        turn-detection-type: server_vad
+        turn-detection-threshold: 0.0
+        turn-detection-silence-duration-ms: 400
+
+      # Qwen3 Realtime TTS Configuration
       tts:
-        url: ${ALIYUN_TTS_URL:wss://nls-gateway-cn-shanghai.aliyuncs.com/ws}
-        app-key: ${ALIYUN_TTS_APP_KEY:}
-        access-key-id: ${ALIYUN_ACCESS_KEY_ID:}
-        access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:}
-        voice: ${ALIYUN_TTS_VOICE:xiaoyun}  # 默认女声
-        format: ${ALIYUN_TTS_FORMAT:mp3}
-        sample-rate: ${ALIYUN_TTS_SAMPLE_RATE:16000}
+        url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime
+        model: qwen3-tts-flash-realtime
+        api-key: ${AI_BAILIAN_API_KEY}
+        voice: Cherry
+        format: pcm
+        sample-rate: 16000
+        mode: server_commit
+        language-type: Chinese
+        speech-rate: 1.0
+        volume: 60
 
     # Rate limiting
     rate-limit:

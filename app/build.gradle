@@ -52,19 +52,8 @@ dependencies {
     implementation "com.itextpdf:itext-core:${libs.versions.itext.get()}"
     implementation "com.itextpdf:font-asian:${libs.versions.itext.get()}"
 
-    // Aliyun NLS SDK Common (for AccessToken)
-    implementation 'com.alibaba.nls:nls-sdk-common:2.2.1'
-
-    // Aliyun Real-time ASR SDK for Speech-to-Text (transcriber for continuous streaming)
-    implementation 'com.alibaba.nls:nls-sdk-transcriber:2.2.1'
-
-    // Aliyun TTS SDK for Text-to-Speech
-    implementation 'com.alibaba.nls:nls-sdk-tts:2.2.1'
-
-    // JAXB API for Java 9+ (required by Aliyun NLS SDK)
-    // Use javax.xml.bind instead of jakarta.xml.bind for compatibility
-    implementation 'javax.xml.bind:jaxb-api:2.3.1'
-    implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.9'
+    // Aliyun DashScope SDK for Qwen3 ASR/TTS (replaces NLS SDK)
+    implementation 'com.alibaba:dashscope-sdk-java:2.22.7'
 
     // Jakarta annotation for Java 21+ (replaces javax.annotation)
     implementation 'jakarta.annotation:jakarta.annotation-api:2.1.1'

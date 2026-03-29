@@ -14,3 +14,7 @@ qodana.yaml
 app/src/main/resources/application-dev.yml
 /docs
 SETUP_API_KEYS.md
+
+# AI Assistant documentation
+CLAUDE.md
+GEMINI.md

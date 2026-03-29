@@ -6,8 +6,8 @@ import interview.guide.modules.voiceinterview.dto.WebSocketControlMessage;
 import interview.guide.modules.voiceinterview.dto.WebSocketSubtitleMessage;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
-import interview.guide.modules.voiceinterview.service.AliyunSttService;
-import interview.guide.modules.voiceinterview.service.AliyunTtsService;
+import interview.guide.modules.voiceinterview.service.QwenAsrService;
+import interview.guide.modules.voiceinterview.service.QwenTtsService;
 import interview.guide.modules.voiceinterview.service.LlmService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.RequiredArgsConstructor;
@@ -41,8 +41,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
 
     private final ObjectMapper objectMapper;
-    private final AliyunSttService sttService;
-    private final AliyunTtsService ttsService;
+    private final QwenAsrService sttService;
+    private final QwenTtsService ttsService;
     private final LlmService llmService;
     private final VoiceInterviewService interviewService;
 
