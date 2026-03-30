@@ -96,7 +96,7 @@ export const request = {
    */
   upload<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
     return instance.post(url, formData, {
-      timeout: 120000,
+      timeout: 300000, // 5分钟，与Nginx proxy_read_timeout对齐
       headers: { 'Content-Type': 'multipart/form-data' },
       ...config,
     }).then(res => res.data);

@@ -3,6 +3,12 @@
 
 server:
   port: 8080
+  # 明确指定HTTP响应编码
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
 spring:
   application:

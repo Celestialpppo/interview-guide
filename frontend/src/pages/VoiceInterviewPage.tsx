@@ -67,6 +67,29 @@ export default function VoiceInterviewPage() {
     };
   }, [showPhaseModal, sessionId, connectionStatus]);
 
+  // Auto-play audio when aiAudio changes
+  useEffect(() => {
+    if (aiAudio && audioPlayerRef.current) {
+      console.log('aiAudio changed, attempting to play, audio element:', audioPlayerRef.current);
+      console.log('Audio src length:', audioPlayerRef.current.src?.length);
+
+      // Some browsers require user interaction before allowing autoplay
+      const playPromise = audioPlayerRef.current.play();
+
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('Audio playback started successfully');
+          })
+          .catch((error) => {
+            console.error('Audio playback failed:', error);
+            // Browser may have blocked autoplay, show user-friendly message
+            setError('请点击页面任意位置以启用音频播放');
+          });
+      }
+    }
+  }, [aiAudio]);
+
   const startTimer = () => {
     timerRef.current = setInterval(() => {
       setCurrentTime((prev) => prev + 1);
@@ -166,7 +189,7 @@ export default function VoiceInterviewPage() {
               },
               onAudioResponse: (audioData, text) => {
                 // Play AI audio and show AI subtitle
-                console.log('Audio response received, text:', text);
+                console.log('Audio response received, text:', text, 'audioData length:', audioData?.length);
                 setAiAudio(audioData);
                 setAiText(text);
                 setIsAiSpeaking(true);
@@ -519,7 +542,7 @@ export default function VoiceInterviewPage() {
       {aiAudio && (
         <audio
           ref={audioPlayerRef}
-          src={`data:audio/mp3;base64,${aiAudio}`}
+          src={`data:audio/wav;base64,${aiAudio}`}
           onEnded={() => {
             setIsAiSpeaking(false);
             if (aiText.trim()) {

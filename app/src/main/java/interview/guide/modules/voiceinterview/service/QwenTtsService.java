@@ -176,24 +176,20 @@ public class QwenTtsService {
                 // Update session with configuration
                 conversation.updateSession(config);
 
-                // Create response with text for synthesis
-                // The createResponse method takes event_id and modalities
-                conversation.createResponse(null, Collections.singletonList(OmniRealtimeModality.AUDIO));
+                log.info("[TTS] Session configured, now triggering TTS synthesis for text: '{}'", text);
 
-                // Send text via sendRaw - construct proper JSON message
-                JsonObject textMessage = new JsonObject();
-                textMessage.addProperty("type", "conversation.item.create");
-                JsonObject item = new JsonObject();
-                item.addProperty("type", "message");
-                item.addProperty("role", "user");
-                JsonObject content = new JsonObject();
-                content.addProperty("type", "input_text");
-                content.addProperty("text", text);
-                item.add("content", content);
-                textMessage.add("item", item);
-                conversation.sendRaw(textMessage.toString());
+                // For Qwen3 TTS, send text via input_text_buffer.append and commit
+                // This follows the OpenAI Realtime API pattern
+                JsonObject appendMsg = new JsonObject();
+                appendMsg.addProperty("type", "input_text_buffer.append");
+                appendMsg.addProperty("text", text);
+                conversation.sendRaw(appendMsg.toString());
 
-                log.debug("Text sent for synthesis");
+                JsonObject commitMsg = new JsonObject();
+                commitMsg.addProperty("type", "input_text_buffer.commit");
+                conversation.sendRaw(commitMsg.toString());
+
+                log.info("[TTS] Text sent to TTS service, waiting for audio response...");
 
                 // Wait for synthesis completion with timeout
                 boolean completed = synthesisLatch.await(30, TimeUnit.SECONDS);
@@ -267,7 +263,7 @@ public class QwenTtsService {
         try {
             String eventType = message.get("type").getAsString();
 
-            log.trace("Received TTS event: {}", eventType);
+            log.debug("Received TTS event: {}, full message: {}", eventType, message);
 
             switch (eventType) {
                 case "session.created":
@@ -279,13 +275,14 @@ public class QwenTtsService {
                     break;
 
                 case "response.audio.delta":
-                    // Audio chunk received
-                    JsonObject deltaObj = message.getAsJsonObject("delta");
-                    if (deltaObj != null && deltaObj.has("audio")) {
-                        String audioBase64 = deltaObj.get("audio").getAsString();
-                        byte[] audioChunk = Base64.getDecoder().decode(audioBase64);
-                        audioContainer.append(audioChunk);
-                        log.trace("Received audio chunk - {} bytes", audioChunk.length);
+                    // Audio chunk received - delta is a base64 string directly
+                    if (message.has("delta")) {
+                        String audioBase64 = message.get("delta").getAsString();
+                        if (audioBase64 != null && !audioBase64.isEmpty()) {
+                            byte[] audioChunk = Base64.getDecoder().decode(audioBase64);
+                            audioContainer.append(audioChunk);
+                            log.trace("Received audio chunk - {} bytes", audioChunk.length);
+                        }
                     }
                     break;
 
@@ -297,16 +294,27 @@ public class QwenTtsService {
 
                 case "error":
                     // Error event
-                    JsonObject errorObj = message.getAsJsonObject("error");
-                    String errorType = errorObj.has("type") ? errorObj.get("type").getAsString() : "unknown";
-                    String errorCode = errorObj.has("code") ? errorObj.get("code").getAsString() : "unknown";
-                    String errorMessage = errorObj.has("message") ? errorObj.get("message").getAsString() : "Unknown error";
+                    if (message.has("error")) {
+                        var errorElement = message.get("error");
+                        String errorType = "unknown";
+                        String errorCode = "unknown";
+                        String errorMessage = "Unknown error";
 
-                    String fullErrorMessage = String.format("TTS Error [%s/%s]: %s", errorType, errorCode, errorMessage);
-                    log.error("{}", fullErrorMessage);
+                        if (errorElement.isJsonObject()) {
+                            JsonObject errorObj = errorElement.getAsJsonObject();
+                            errorType = errorObj.has("type") ? errorObj.get("type").getAsString() : "unknown";
+                            errorCode = errorObj.has("code") ? errorObj.get("code").getAsString() : "unknown";
+                            errorMessage = errorObj.has("message") ? errorObj.get("message").getAsString() : "Unknown error";
+                        } else {
+                            errorMessage = errorElement.toString();
+                        }
 
-                    errorRef.set(new RuntimeException(fullErrorMessage));
-                    synthesisLatch.countDown();
+                        String fullErrorMessage = String.format("TTS Error [%s/%s]: %s", errorType, errorCode, errorMessage);
+                        log.error("{}", fullErrorMessage);
+
+                        errorRef.set(new RuntimeException(fullErrorMessage));
+                        synthesisLatch.countDown();
+                    }
                     break;
 
                 case "response.done":

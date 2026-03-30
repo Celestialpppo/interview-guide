@@ -301,7 +301,11 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
             sendSubtitle(session, userText, true);
 
             // TTS synthesis
+            log.info("[Session: {}] Starting TTS synthesis for text (length: {}): '{}'",
+                    sessionId, aiReply.length(), aiReply.substring(0, Math.min(50, aiReply.length())));
             byte[] aiAudio = ttsService.synthesize(aiReply);
+            log.info("[Session: {}] TTS synthesis completed, PCM audio size: {} bytes",
+                    sessionId, aiAudio != null ? aiAudio.length : 0);
 
             // Final check before sending audio
             if (!session.isOpen()) {
@@ -313,7 +317,9 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
                 log.warn("TTS returned empty audio, using text-only response");
                 sendTextMessage(session, aiReply);
             } else {
-                sendAudio(session, aiAudio, aiReply);
+                // Convert PCM to WAV format for browser playback
+                byte[] wavAudio = convertPcmToWav(aiAudio);
+                sendAudio(session, wavAudio, aiReply);
             }
 
             // Save message
@@ -401,6 +407,8 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
         }
         try {
             String base64Audio = Base64.getEncoder().encodeToString(audio);
+            log.info("Sending audio to frontend - text: '{}', PCM size: {} bytes, Base64 length: {}, WAV size: {} bytes",
+                    text, audio.length, base64Audio.length(), audio.length);
 
             Map<String, Object> message = Map.of(
                     "type", "audio",
@@ -409,6 +417,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
             );
 
             session.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
+            log.info("Audio message sent successfully");
         } catch (Exception e) {
             log.error("Error sending audio", e);
         }
@@ -613,6 +622,64 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("Error saving message for session {}", sessionId, e);
         }
+    }
+
+    /**
+     * Convert PCM audio to WAV format
+     * Adds 44-byte WAV header to PCM data for browser playback
+     *
+     * @param pcmData Raw PCM audio data (16kHz, 16-bit, mono)
+     * @return WAV formatted audio data
+     */
+    private byte[] convertPcmToWav(byte[] pcmData) {
+        int sampleRate = 16000;
+        int bitsPerSample = 16;
+        int numChannels = 1;
+        int byteRate = sampleRate * numChannels * bitsPerSample / 8;
+        int blockAlign = numChannels * bitsPerSample / 8;
+        int dataSize = pcmData.length;
+        int fileSize = dataSize + 36;
+
+        byte[] wavData = new byte[dataSize + 44];
+
+        try {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+
+            // RIFF header
+            dos.writeBytes("RIFF");
+            dos.writeInt(Integer.reverseBytes(fileSize));
+            dos.writeBytes("WAVE");
+
+            // fmt chunk
+            dos.writeBytes("fmt ");
+            dos.writeInt(Integer.reverseBytes(16)); // Chunk size
+            dos.writeShort(Short.reverseBytes((short) 1)); // Audio format (1 = PCM)
+            dos.writeShort(Short.reverseBytes((short) numChannels));
+            dos.writeInt(Integer.reverseBytes(sampleRate));
+            dos.writeInt(Integer.reverseBytes(byteRate));
+            dos.writeShort(Short.reverseBytes((short) blockAlign));
+            dos.writeShort(Short.reverseBytes((short) bitsPerSample));
+
+            // data chunk
+            dos.writeBytes("data");
+            dos.writeInt(Integer.reverseBytes(dataSize));
+
+            dos.flush();
+
+            // Copy header
+            byte[] header = baos.toByteArray();
+            System.arraycopy(header, 0, wavData, 0, header.length);
+
+            // Copy PCM data
+            System.arraycopy(pcmData, 0, wavData, 44, pcmData.length);
+
+        } catch (Exception e) {
+            log.error("Error converting PCM to WAV", e);
+            return pcmData; // Return original if conversion fails
+        }
+
+        return wavData;
     }
 
     /**
