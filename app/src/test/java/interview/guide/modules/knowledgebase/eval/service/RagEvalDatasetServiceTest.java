@@ -1,6 +1,5 @@
 package interview.guide.modules.knowledgebase.eval.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.modules.knowledgebase.eval.model.RagEvalCaseEntity;
 import interview.guide.modules.knowledgebase.eval.model.RagEvalCaseQrelEntity;
@@ -16,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.mock.web.MockMultipartFile;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
