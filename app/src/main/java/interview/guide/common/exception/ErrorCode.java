@@ -52,6 +52,10 @@ public enum ErrorCode {
     KNOWLEDGE_BASE_QUERY_FAILED(6004, "知识库查询失败"),
     KNOWLEDGE_BASE_DELETE_FAILED(6005, "知识库删除失败"),
     KNOWLEDGE_BASE_VECTORIZATION_FAILED(6006, "知识库向量化失败"),
+    RAG_EVAL_DATASET_NOT_FOUND(6007, "RAG评测数据集不存在"),
+    RAG_EVAL_DATASET_IMPORT_FAILED(6008, "RAG评测数据集导入失败"),
+    RAG_EVAL_RUN_FAILED(6009, "RAG评测执行失败"),
+    RAG_EVAL_RUN_NOT_FOUND(6010, "RAG评测任务不存在"),
     
     // ========== AI服务错误 7xxx ==========
     AI_SERVICE_UNAVAILABLE(7001, "AI服务暂时不可用，请稍后重试"),
