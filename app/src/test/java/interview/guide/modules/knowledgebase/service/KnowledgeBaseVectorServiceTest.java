@@ -1,5 +1,7 @@
 package interview.guide.modules.knowledgebase.service;
 
+import interview.guide.modules.knowledgebase.model.KnowledgeBaseEntity;
+import interview.guide.modules.knowledgebase.repository.KnowledgeBaseRepository;
 import interview.guide.modules.knowledgebase.repository.VectorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,10 +51,25 @@ class KnowledgeBaseVectorServiceTest {
     @Mock
     private VectorRepository vectorRepository;
 
+    @Mock
+    private KnowledgeBaseRepository knowledgeBaseRepository;
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        vectorService = new KnowledgeBaseVectorService(vectorStore, vectorRepository);
+        when(knowledgeBaseRepository.findById(anyLong())).thenAnswer(invocation -> {
+            Long kbId = invocation.getArgument(0);
+            KnowledgeBaseEntity entity = new KnowledgeBaseEntity();
+            entity.setId(kbId);
+            entity.setName("知识库-" + kbId);
+            entity.setOriginalFilename("kb-" + kbId + ".md");
+            entity.setContentType("text/markdown");
+            entity.setFileHash("hash-" + kbId);
+            return Optional.of(entity);
+        });
+        when(knowledgeBaseRepository.save(any(KnowledgeBaseEntity.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        vectorService = new KnowledgeBaseVectorService(vectorStore, vectorRepository, knowledgeBaseRepository);
     }
 
     // ==================== 共享辅助方法 ====================
@@ -157,7 +175,7 @@ class KnowledgeBaseVectorServiceTest {
         }
 
         @Test
-        @DisplayName("验证 metadata 正确设置 kb_id")
+        @DisplayName("验证 metadata 正确设置并包含 chunk trace 字段")
         void testMetadataContainsKnowledgeBaseId() {
             Long knowledgeBaseId = 123L;
             String content = generateLongContent(10);
@@ -175,6 +193,9 @@ class KnowledgeBaseVectorServiceTest {
                 for (Document doc : batch) {
                     assertEquals(knowledgeBaseId.toString(), doc.getMetadata().get("kb_id"),
                             "metadata 中的 kb_id 应该等于知识库ID的字符串形式");
+                    assertNotNull(doc.getMetadata().get("chunk_id"), "metadata 应包含 chunk_id");
+                    assertNotNull(doc.getMetadata().get("chunk_index"), "metadata 应包含 chunk_index");
+                    assertEquals("kb-123.md", doc.getMetadata().get("source_name"));
                 }
             }
         }
