@@ -1,7 +1,5 @@
 package interview.guide.modules.knowledgebase.eval.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import interview.guide.common.ai.StructuredOutputInvoker;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.knowledgebase.eval.model.GenerationJudgeResult;
@@ -17,6 +15,8 @@ import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -155,7 +155,7 @@ public class RagGenerationJudgeService {
     private String writeJson(List<AnswerCitation> citations) {
         try {
             return objectMapper.writeValueAsString(citations != null ? citations : List.of());
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return "[]";
         }
     }
