@@ -36,7 +36,6 @@ public class AnswerEvaluationService {
     
     private static final Logger log = LoggerFactory.getLogger(AnswerEvaluationService.class);
     
-    private final ChatClient chatClient;
     private final PromptTemplate systemPromptTemplate;
     private final PromptTemplate userPromptTemplate;
     private final BeanOutputConverter<EvaluationReportDTO> outputConverter;
@@ -76,14 +75,12 @@ public class AnswerEvaluationService {
     ) {}
     
     public AnswerEvaluationService(
-            ChatClient.Builder chatClientBuilder,
             StructuredOutputInvoker structuredOutputInvoker,
             @Value("classpath:prompts/interview-evaluation-system.st") Resource systemPromptResource,
             @Value("classpath:prompts/interview-evaluation-user.st") Resource userPromptResource,
             @Value("classpath:prompts/interview-evaluation-summary-system.st") Resource summarySystemPromptResource,
             @Value("classpath:prompts/interview-evaluation-summary-user.st") Resource summaryUserPromptResource,
             @Value("${app.interview.evaluation.batch-size:8}") int evaluationBatchSize) throws IOException {
-        this.chatClient = chatClientBuilder.build();
         this.structuredOutputInvoker = structuredOutputInvoker;
         this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
         this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
@@ -97,7 +94,7 @@ public class AnswerEvaluationService {
     /**
      * 评估完整面试并生成报告
      */
-    public InterviewReportDTO evaluateInterview(String sessionId, String resumeText,
+    public InterviewReportDTO evaluateInterview(ChatClient chatClient, String sessionId, String resumeText,
                                                  List<InterviewQuestionDTO> questions) {
         log.info("开始评估面试: {}, 共{}题", sessionId, questions.size());
         
@@ -108,13 +105,14 @@ public class AnswerEvaluationService {
                 : resumeText;
 
             // 分批评估，避免单次上下文过大导致 token 超限
-            List<BatchEvaluationResult> batchResults = evaluateInBatches(sessionId, resumeSummary, questions);
+            List<BatchEvaluationResult> batchResults = evaluateInBatches(chatClient, sessionId, resumeSummary, questions);
 
             List<QuestionEvaluationDTO> mergedEvaluations = mergeQuestionEvaluations(batchResults);
             String fallbackOverallFeedback = mergeOverallFeedback(batchResults);
             List<String> fallbackStrengths = mergeListItems(batchResults, true);
             List<String> fallbackImprovements = mergeListItems(batchResults, false);
             FinalSummaryDTO finalSummary = summarizeBatchResults(
+                chatClient,
                 sessionId,
                 resumeSummary,
                 questions,
@@ -159,6 +157,7 @@ public class AnswerEvaluationService {
     }
 
     private List<BatchEvaluationResult> evaluateInBatches(
+        ChatClient chatClient,
         String sessionId,
         String resumeSummary,
         List<InterviewQuestionDTO> questions
@@ -167,13 +166,14 @@ public class AnswerEvaluationService {
         for (int start = 0; start < questions.size(); start += evaluationBatchSize) {
             int end = Math.min(start + evaluationBatchSize, questions.size());
             List<InterviewQuestionDTO> batchQuestions = questions.subList(start, end);
-            EvaluationReportDTO report = evaluateBatch(sessionId, resumeSummary, batchQuestions, start, end);
+            EvaluationReportDTO report = evaluateBatch(chatClient, sessionId, resumeSummary, batchQuestions, start, end);
             results.add(new BatchEvaluationResult(start, end, report));
         }
         return results;
     }
 
     private EvaluationReportDTO evaluateBatch(
+        ChatClient chatClient,
         String sessionId,
         String resumeSummary,
         List<InterviewQuestionDTO> batchQuestions,
@@ -267,6 +267,7 @@ public class AnswerEvaluationService {
     }
 
     private FinalSummaryDTO summarizeBatchResults(
+        ChatClient chatClient,
         String sessionId,
         String resumeSummary,
         List<InterviewQuestionDTO> questions,

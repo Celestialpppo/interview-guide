@@ -18,3 +18,6 @@ SETUP_API_KEYS.md
 # AI Assistant documentation
 CLAUDE.md
 GEMINI.md
+
+# Playwright MCP
+.playwright-mcp/

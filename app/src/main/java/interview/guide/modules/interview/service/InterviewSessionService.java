@@ -34,6 +34,7 @@ public class InterviewSessionService {
     private final InterviewSessionCache sessionCache;
     private final ObjectMapper objectMapper;
     private final EvaluateStreamProducer evaluateStreamProducer;
+    private final interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
 
     /**
      * 创建新的面试会话
@@ -53,8 +54,8 @@ public class InterviewSessionService {
 
         String sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
 
-        log.info("创建新面试会话: {}, 题目数量: {}, resumeId: {}",
-            sessionId, request.questionCount(), request.resumeId());
+        log.info("创建新面试会话: {}, 题目数量: {}, resumeId: {}, llmProvider: {}",
+            sessionId, request.questionCount(), request.resumeId(), request.llmProvider());
 
         // 获取历史问题
         List<String> historicalQuestions = null;
@@ -62,8 +63,14 @@ public class InterviewSessionService {
             historicalQuestions = persistenceService.getHistoricalQuestionsByResumeId(request.resumeId());
         }
 
+        // 获取 LLM 客户端
+        org.springframework.ai.chat.client.ChatClient chatClient = (request.llmProvider() != null && !request.llmProvider().isBlank())
+            ? llmProviderRegistry.getChatClient(request.llmProvider())
+            : llmProviderRegistry.getDefaultChatClient();
+
         // 生成面试问题
         List<InterviewQuestionDTO> questions = questionService.generateQuestions(
+            chatClient,
             request.resumeText(),
             request.questionCount(),
             historicalQuestions
@@ -83,7 +90,7 @@ public class InterviewSessionService {
         if (request.resumeId() != null) {
             try {
                 persistenceService.saveSession(sessionId, request.resumeId(),
-                    questions.size(), questions);
+                    questions.size(), questions, request.llmProvider());
             } catch (Exception e) {
                 log.warn("保存面试会话到数据库失败: {}", e.getMessage());
             }
@@ -443,7 +450,18 @@ public class InterviewSessionService {
 
         List<InterviewQuestionDTO> questions = session.getQuestions(objectMapper);
 
+        // 获取 LLM 客户端
+        String provider = "dashscope";
+        Optional<InterviewSessionEntity> entityOpt = persistenceService.findBySessionId(sessionId);
+        if (entityOpt.isPresent()) {
+            provider = entityOpt.get().getLlmProvider();
+        }
+        org.springframework.ai.chat.client.ChatClient chatClient = (provider != null && !provider.isBlank())
+            ? llmProviderRegistry.getChatClient(provider)
+            : llmProviderRegistry.getDefaultChatClient();
+
         InterviewReportDTO report = evaluationService.evaluateInterview(
+            chatClient,
             sessionId,
             session.getResumeText(),
             questions

@@ -15,6 +15,7 @@ const KnowledgeBaseUploadPage = lazy(() => import('./pages/KnowledgeBaseUploadPa
 const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePage'));
 const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewHistoryPage = lazy(() => import('./pages/VoiceInterviewHistoryPage'));
+const InterviewSchedulePage = lazy(() => import('./pages/InterviewSchedulePage'));
 
 // Loading component
 const Loading = () => (
@@ -169,6 +170,9 @@ function App() {
 
             {/* 语音面试历史 */}
             <Route path="voice-interview/history" element={<VoiceInterviewHistoryPage />} />
+
+            {/* 面试日程管理 */}
+            <Route path="interview-schedule" element={<InterviewSchedulePage />} />
 
             {/* 问答助手（知识库聊天） */}
             <Route path="knowledgebase/chat" element={<KnowledgeBaseQueryPageWrapper />} />

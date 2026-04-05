@@ -4,6 +4,8 @@ import type {InterviewSession} from '../types/interview';
 interface InterviewConfigPanelProps {
   questionCount: number;
   onQuestionCountChange: (count: number) => void;
+  llmProvider: string;
+  onLlmProviderChange: (provider: string) => void;
   onStart: () => void;
   isCreating: boolean;
   checkingUnfinished: boolean;
@@ -21,6 +23,8 @@ interface InterviewConfigPanelProps {
 export default function InterviewConfigPanel({
   questionCount,
   onQuestionCountChange,
+  llmProvider,
+  onLlmProviderChange,
   onStart,
   isCreating,
   checkingUnfinished,
@@ -32,6 +36,10 @@ export default function InterviewConfigPanel({
   error
 }: InterviewConfigPanelProps) {
   const questionCounts = [6, 8, 10, 12, 15];
+  const providers = [
+    { id: 'dashscope', name: 'Aliyun (DashScope)', icon: '☁️' },
+    { id: 'lmstudio', name: 'Local (LM Studio)', icon: '🏠' }
+  ];
 
   return (
       <motion.div
@@ -119,6 +127,30 @@ export default function InterviewConfigPanel({
         </AnimatePresence>
 
         <div className="space-y-6">
+          <div>
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+              LLM 模型供应商
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {providers.map((p) => (
+                <motion.button
+                  key={p.id}
+                  onClick={() => onLlmProviderChange(p.id)}
+                  className={`px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
+                    llmProvider === p.id
+                      ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                  }`}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span>{p.icon}</span>
+                  {p.name}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
           <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
               题目数量

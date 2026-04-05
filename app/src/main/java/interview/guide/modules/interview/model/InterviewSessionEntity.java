@@ -84,6 +84,10 @@ public class InterviewSessionEntity {
     // 评估错误信息
     @Column(length = 500)
     private String evaluateError;
+
+    // LLM提供商
+    @Column(length = 50)
+    private String llmProvider = "dashscope";
     
     public enum SessionStatus {
         CREATED,      // 会话已创建
@@ -232,6 +236,14 @@ public class InterviewSessionEntity {
 
     public void setEvaluateError(String evaluateError) {
         this.evaluateError = evaluateError;
+    }
+
+    public String getLlmProvider() {
+        return llmProvider;
+    }
+
+    public void setLlmProvider(String llmProvider) {
+        this.llmProvider = llmProvider;
     }
 
     public void addAnswer(InterviewAnswerEntity answer) {

@@ -15,12 +15,12 @@ import java.util.function.Consumer;
 @Slf4j
 public class DashscopeLlmService implements LlmService {
 
-    private final ChatClient chatClient;
+    private final interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
     private final VoiceInterviewPromptService promptService;
     private final ResumeRepository resumeRepository;
 
-    public DashscopeLlmService(ChatClient.Builder chatClientBuilder, VoiceInterviewPromptService promptService, ResumeRepository resumeRepository) {
-        this.chatClient = chatClientBuilder.build();
+    public DashscopeLlmService(interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry, VoiceInterviewPromptService promptService, ResumeRepository resumeRepository) {
+        this.llmProviderRegistry = llmProviderRegistry;
         this.promptService = promptService;
         this.resumeRepository = resumeRepository;
     }
@@ -55,8 +55,16 @@ public class DashscopeLlmService implements LlmService {
             // Add current user input
             promptBuilder.append("用户：").append(userInput);
 
+            // Get LLM client from registry
+            String provider = session.getLlmProvider();
+            log.info("[VoiceInterview] Session {} using LLM provider: {}", session.getId(), provider);
+            
+            org.springframework.ai.chat.client.ChatClient chatClient = (provider != null && !provider.isBlank())
+                ? llmProviderRegistry.getChatClient(provider)
+                : llmProviderRegistry.getDefaultChatClient();
+
             // Build prompt with ChatClient
-            ChatClient.CallResponseSpec response = chatClient.prompt()
+            org.springframework.ai.chat.client.ChatClient.CallResponseSpec response = chatClient.prompt()
                 .system(systemPrompt)
                 .user(promptBuilder.toString())
                 .call();
@@ -69,7 +77,7 @@ public class DashscopeLlmService implements LlmService {
             return content;
 
         } catch (Exception e) {
-            log.error("LLM chat error for session {}", session.getId(), e);
+            log.error("LLM chat error for session {}: {}", session.getId(), e.getMessage(), e);
             return "抱歉，我刚才发生了一点错误。能再说一遍吗？";
         }
     }

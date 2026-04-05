@@ -34,6 +34,7 @@ export interface CreateInterviewRequest {
   questionCount: number;
   resumeId?: number;
   forceCreate?: boolean;  // 是否强制创建新会话（忽略未完成的会话）
+  llmProvider?: string;
 }
 
 export interface SubmitAnswerRequest {

@@ -25,6 +25,7 @@ interface InterviewProps {
 export default function Interview({ resumeText, resumeId, onBack, onInterviewComplete }: InterviewProps) {
   const [stage, setStage] = useState<InterviewStage>('config');
   const [questionCount, setQuestionCount] = useState(8);
+  const [llmProvider, setLlmProvider] = useState('dashscope');
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -119,7 +120,8 @@ export default function Interview({ resumeText, resumeId, onBack, onInterviewCom
         resumeText,
         questionCount,
         resumeId,
-        forceCreate: forceCreateNew
+        forceCreate: forceCreateNew,
+        llmProvider
       });
 
             // 重置强制创建标志
@@ -222,6 +224,8 @@ export default function Interview({ resumeText, resumeId, onBack, onInterviewCom
       <InterviewConfigPanel
         questionCount={questionCount}
         onQuestionCountChange={setQuestionCount}
+        llmProvider={llmProvider}
+        onLlmProviderChange={setLlmProvider}
         onStart={startInterview}
         isCreating={isCreating}
         checkingUnfinished={checkingUnfinished}

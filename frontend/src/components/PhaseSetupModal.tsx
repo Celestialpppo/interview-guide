@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Clock, FileText, FileStack } from 'lucide-react';
+import { X, Clock, FileText, FileStack, Users, Bot } from 'lucide-react';
 import { historyApi, ResumeListItem } from '../api/history';
 
 export interface PhaseConfig {
@@ -10,6 +10,8 @@ export interface PhaseConfig {
   plannedDuration: number;
   customJD?: string;
   resumeId?: number; // Add resumeId
+  roleType?: string; // Add roleType
+  llmProvider?: string;
 }
 
 interface PhaseSetupModalProps {
@@ -17,7 +19,42 @@ interface PhaseSetupModalProps {
   onClose: () => void;
   onStart: (config: PhaseConfig) => void;
   roleType: string;
+  onRoleTypeChange?: (roleType: string) => void; // Add callback for role type changes
 }
+
+const INTERVIEWER_TYPES = [
+  {
+    value: 'ali-p8',
+    label: '阿里P8后端面试',
+    description: '后端技术、系统设计、高并发',
+    icon: '🎯',
+  },
+  {
+    value: 'byteance-algo',
+    label: '字节算法工程师面试',
+    description: '算法、数据结构、机器学习',
+    icon: '🤖',
+  },
+  {
+    value: 'tencent-backend',
+    label: '腾讯后台开发面试',
+    description: '后台开发、网络编程、分布式',
+    icon: '💻',
+  },
+];
+
+const LLM_PROVIDERS = [
+  {
+    value: 'dashscope',
+    label: 'Aliyun (DashScope)',
+    icon: '☁️',
+  },
+  {
+    value: 'lmstudio',
+    label: 'Local (LM Studio)',
+    icon: '🏠',
+  },
+];
 
 const PHASES = [
   {
@@ -48,14 +85,17 @@ export default function PhaseSetupModal({
   onClose,
   onStart,
   roleType,
+  onRoleTypeChange,
 }: PhaseSetupModalProps) {
   const [config, setConfig] = useState<PhaseConfig>({
     techEnabled: true,
     projectEnabled: true,
     hrEnabled: true,
     plannedDuration: 30,
+    roleType: roleType, // Initialize with prop value
+    llmProvider: 'dashscope',
   });
-  
+
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [loadingResumes, setLoadingResumes] = useState(false);
 
@@ -107,10 +147,22 @@ export default function PhaseSetupModal({
 
   const handleResumeSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
-    setConfig((prev) => ({ 
-      ...prev, 
+    setConfig((prev) => ({
+      ...prev,
       resumeId: val ? parseInt(val, 10) : undefined,
     }));
+  };
+
+  const handleRoleTypeChange = (roleType: string) => {
+    setConfig((prev) => ({ ...prev, roleType }));
+    // Notify parent component about role type change
+    if (onRoleTypeChange) {
+      onRoleTypeChange(roleType);
+    }
+  };
+
+  const handleLlmProviderChange = (llmProvider: string) => {
+    setConfig((prev) => ({ ...prev, llmProvider }));
   };
 
   const atLeastOneEnabled = PHASES.some((phase) => config[phase.key]);
@@ -170,9 +222,6 @@ export default function PhaseSetupModal({
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                       配置面试参数
                     </h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      面试官类型：{roleType}
-                    </p>
                   </div>
                   <button
                     onClick={onClose}
@@ -185,7 +234,89 @@ export default function PhaseSetupModal({
 
               {/* Content */}
               <div className="px-6 py-4 space-y-6">
-                
+
+                {/* Interviewer Type Selection */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users className="w-5 h-5 text-primary-500" />
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      选择面试官类型
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {INTERVIEWER_TYPES.map((type) => (
+                      <button
+                        key={type.value}
+                        onClick={() => handleRoleTypeChange(type.value)}
+                        className={`
+                          w-full flex items-center gap-3 p-3 rounded-xl border-2
+                          transition-all duration-200 text-left
+                          ${config.roleType === type.value
+                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                          }
+                        `}
+                      >
+                        <div className="text-2xl flex-shrink-0">{type.icon}</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm">
+                            {type.label}
+                          </p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400">
+                            {type.description}
+                          </p>
+                        </div>
+                        <div className={`
+                          w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0
+                          ${config.roleType === type.value
+                            ? 'border-primary-500 bg-primary-500'
+                            : 'border-slate-300 dark:border-slate-600'
+                          }
+                        `}>
+                          {config.roleType === type.value && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* LLM Provider Selection */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Bot className="w-5 h-5 text-primary-500" />
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      选择 LLM 模型供应商
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {LLM_PROVIDERS.map((provider) => (
+                      <button
+                        key={provider.value}
+                        onClick={() => handleLlmProviderChange(provider.value)}
+                        className={`
+                          flex items-center gap-3 p-3 rounded-xl border-2
+                          transition-all duration-200 text-left
+                          ${config.llmProvider === provider.value
+                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                          }
+                        `}
+                      >
+                        <div className="text-2xl flex-shrink-0">{provider.icon}</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm">
+                            {provider.label}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Resume Selection */}
                 <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl p-4 border border-primary-100 dark:border-primary-800/30">
                   <div className="flex items-center gap-3 mb-3">

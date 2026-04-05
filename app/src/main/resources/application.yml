@@ -1,6 +1,11 @@
 # AI Interview Platform Configuration
 # 智能AI面试官平台配置
 
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
 server:
   port: 8080
   # 明确指定HTTP响应编码
@@ -24,12 +29,13 @@ spring:
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:interview_guide}
     username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:123456}
+    # 与根目录 docker-compose.yml 中 postgres 服务默认一致（本地只起依赖容器 + bootRun 时无需改）
+    password: ${POSTGRES_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: create #首次启动用 create，表创建成功后，改回 update
+      ddl-auto: update #首次启动用 create，表创建成功后，改回 update
     show-sql: false
     properties:
       hibernate:
@@ -84,6 +90,16 @@ spring:
 # Application custom configuration
 app:
   ai:
+    default-provider: dashscope
+    providers:
+      dashscope:
+        base-url: https://dashscope.aliyuncs.com/compatible-mode
+        api-key: ${AI_BAILIAN_API_KEY}
+        model: qwen-plus
+      lmstudio:
+        base-url: http://localhost:1234
+        api-key: lm-studio
+        model: qwen2.5-7b-instruct
     # 结构化输出重试次数（用于 BeanOutputConverter 解析失败时的业务层重试）
     structured-max-attempts: ${APP_AI_STRUCTURED_MAX_ATTEMPTS:2}
     # 重试时是否将上次错误原因注入提示词，帮助模型定向修复输出
@@ -113,8 +129,8 @@ app:
   # RustFS (S3兼容) 存储配置
   storage:
     endpoint: ${APP_STORAGE_ENDPOINT:http://localhost:9000}
-    access-key: ${APP_STORAGE_ACCESS_KEY:wr45VXJZhCxc6FAWz0YR}
-    secret-key: ${APP_STORAGE_SECRET_KEY:GtKxV57WJkpw4CvASPBzTy2DYElLnRqh8dIXQa0m}
+    access-key: ${APP_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${APP_STORAGE_SECRET_KEY:minioadmin}
     bucket: ${APP_STORAGE_BUCKET:interview-guide}
     region: ${APP_STORAGE_REGION:us-east-1}
   
@@ -170,7 +186,8 @@ app:
         enable-turn-detection: true
         turn-detection-type: server_vad
         turn-detection-threshold: 0.0
-        turn-detection-silence-duration-ms: 400
+        # 静音多久判为一句结束；400 容易在句中停顿处切开，建议 900–1200
+        turn-detection-silence-duration-ms: ${APP_VOICE_ASR_SILENCE_MS:1000}
 
       # Qwen3 Realtime TTS Configuration
       tts:
@@ -184,6 +201,9 @@ app:
         language-type: Chinese
         speech-rate: 1.0
         volume: 60
+
+    # 用户说完一小段 STT 定稿后，再等多久（毫秒）才触发面试官回复；过短会一句一答很碎
+    user-utterance-debounce-ms: ${APP_VOICE_USER_UTTERANCE_DEBOUNCE_MS:1600}
 
     # Rate limiting
     rate-limit:

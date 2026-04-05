@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {ChevronRight, Database, FileStack, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
+import {Calendar, ChevronRight, Database, FileStack, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 
 interface NavItem {
@@ -37,7 +37,7 @@ export default function Layout() {
       id: 'voice',
       title: '语音面试',
       items: [
-        { id: 'voice-interview', path: '/voice-interview?role=ali-p8', label: '语音面试', icon: Mic, description: '实时语音对话' },
+        { id: 'voice-interview', path: '/voice-interview?role=ali-p8', label: '开始面试', icon: Mic, description: '实时语音对话' },
       ],
     },
     {
@@ -46,6 +46,13 @@ export default function Layout() {
       items: [
         { id: 'kb-manage', path: '/knowledgebase', label: '知识库管理', icon: Database, description: '管理知识文档' },
         { id: 'chat', path: '/knowledgebase/chat', label: '问答助手', icon: MessageSquare, description: '基于知识库问答' },
+      ],
+    },
+    {
+      id: 'schedule',
+      title: '面试日程',
+      items: [
+        { id: 'interview-schedule', path: '/interview-schedule', label: '日程管理', icon: Calendar, description: '管理面试安排' },
       ],
     },
   ];

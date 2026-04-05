@@ -6,12 +6,14 @@ import interview.guide.modules.voiceinterview.dto.WebSocketControlMessage;
 import interview.guide.modules.voiceinterview.dto.WebSocketSubtitleMessage;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
+import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.service.QwenAsrService;
 import interview.guide.modules.voiceinterview.service.QwenTtsService;
 import interview.guide.modules.voiceinterview.service.LlmService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -24,6 +26,10 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -38,13 +44,23 @@ import java.util.concurrent.atomic.AtomicReference;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
+public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler implements DisposableBean {
 
     private final ObjectMapper objectMapper;
     private final QwenAsrService sttService;
     private final QwenTtsService ttsService;
     private final LlmService llmService;
     private final VoiceInterviewService interviewService;
+    private final VoiceInterviewProperties voiceInterviewProperties;
+
+    /**
+     * 合并多段 STT 定稿后再触发 LLM 的延迟调度（与 {@link VoiceInterviewProperties#getUserUtteranceDebounceMs()} 配合）
+     */
+    private final ScheduledExecutorService utteranceMergeScheduler = Executors.newScheduledThreadPool(2, r -> {
+        Thread t = new Thread(r, "voice-utterance-merge");
+        t.setDaemon(true);
+        return t;
+    });
 
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, SessionState> sessionStates = new ConcurrentHashMap<>();
@@ -71,17 +87,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
         log.info("WebSocket connection established for session: {}", sessionId);
 
         try {
-            // Start STT transcription session
-            sttService.startTranscription(
-                sessionId,
-                // On result callback
-                recognizedText -> handleSttResult(sessionId, recognizedText),
-                // On error callback
-                error -> {
-                    log.error("STT error for session {}", sessionId, error);
-                    sendError(session, "语音识别失败: " + error.getMessage());
-                }
-            );
+            startDashScopeStt(sessionId, session);
 
             // 发送欢迎消息
             sendMessage(session, createWelcomeMessage());
@@ -174,10 +180,18 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
+    public void destroy() {
+        utteranceMergeScheduler.shutdownNow();
+    }
+
+    @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         String sessionId = extractSessionId(session);
         sessions.remove(sessionId);
-        sessionStates.remove(sessionId);
+        SessionState removedState = sessionStates.remove(sessionId);
+        if (removedState != null) {
+            removedState.cancelPendingUtteranceFlush();
+        }
         lastActivityTime.remove(sessionId);
 
         // Stop STT transcription
@@ -194,6 +208,46 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
         log.error("WebSocket transport error for session {}", extractSessionId(session), exception);
     }
 
+    /** 无会话、append 失败等均可重连 ASR */
+    private static boolean shouldRecoverAsrConnection(IllegalStateException ex) {
+        String m = ex.getMessage();
+        if (m == null) {
+            return false;
+        }
+        return m.contains("No active session") || m.contains("ASR append failed");
+    }
+
+    private void startDashScopeStt(String sessionId, WebSocketSession session) {
+        sttService.startTranscription(
+                sessionId,
+                text -> handleSttResult(sessionId, text, true),
+                text -> handleSttResult(sessionId, text, false),
+                error -> {
+                    log.error("STT error for session {}", sessionId, error);
+                    sendError(session, "语音识别失败: " + error.getMessage());
+                }
+        );
+    }
+
+    /**
+     * DashScope ASR 断线后重连（回调与首次 start 一致）
+     */
+    private void restartDashScopeStt(String sessionId) {
+        WebSocketSession session = sessions.get(sessionId);
+        if (session == null || !session.isOpen()) {
+            return;
+        }
+        sttService.restartTranscription(
+                sessionId,
+                text -> handleSttResult(sessionId, text, true),
+                text -> handleSttResult(sessionId, text, false),
+                error -> {
+                    log.error("STT error for session {}", sessionId, error);
+                    sendError(session, "语音识别失败: " + error.getMessage());
+                }
+        );
+    }
+
     /**
      * Handle user audio message
      * Just send audio to STT transcriber (results come via callback)
@@ -206,27 +260,49 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
         }
 
         try {
-            // Decode base64 audio
             byte[] audioData = Base64.getDecoder().decode(base64Audio);
             log.debug("Received audio data for session {}, size: {} bytes", sessionId, audioData.length);
 
-            // Send audio to STT transcriber (results come via callback)
-            sttService.sendAudio(sessionId, audioData);
+            try {
+                sttService.sendAudio(sessionId, audioData);
+            } catch (IllegalStateException ex) {
+                if (shouldRecoverAsrConnection(ex)) {
+                    log.warn("[Session: {}] ASR send failed ({}), restarting DashScope and retrying chunk",
+                            sessionId, ex.getMessage() != null ? ex.getMessage() : "unknown");
+                    restartDashScopeStt(sessionId);
+                    boolean sent = false;
+                    for (int i = 0; i < 15; i++) {
+                        try {
+                            Thread.sleep(80);
+                            sttService.sendAudio(sessionId, audioData);
+                            sent = true;
+                            break;
+                        } catch (IllegalStateException retry) {
+                            if (!shouldRecoverAsrConnection(retry)) {
+                                throw retry;
+                            }
+                        }
+                    }
+                    if (!sent) {
+                        log.error("[Session: {}] ASR still down after restart", sessionId);
+                        sendErrorMessage(session, "语音识别连接中断，请刷新页面后重试");
+                    }
+                } else {
+                    throw ex;
+                }
+            }
 
         } catch (Exception e) {
             log.error("Error handling user audio for session {}", sessionId, e);
-
-            // Send user-friendly error message
             String errorMessage = getErrorMessage(e);
             sendErrorMessage(session, errorMessage);
         }
     }
 
     /**
-     * Handle STT result from callback
-     * Accumulates text and triggers LLM when sentence is complete
+     * Handle STT result from callback (partial = live; final = committed segment for LLM).
      */
-    private void handleSttResult(String sessionId, String recognizedText) {
+    private void handleSttResult(String sessionId, String recognizedText, boolean isFinalSegment) {
         WebSocketSession session = sessions.get(sessionId);
         SessionState state = sessionStates.get(sessionId);
 
@@ -235,26 +311,60 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        log.debug("STT result for session {}: {}", sessionId, recognizedText);
+        if (!isFinalSegment) {
+            // Streaming partial: show text only; do not drive LLM until completed + punctuation
+            sendSubtitle(session, recognizedText, false);
+            return;
+        }
 
-        // Send subtitle to frontend (intermediate result)
-        sendSubtitle(session, recognizedText, false);
+        log.debug("STT final segment for session {}: {}", sessionId, recognizedText);
 
-        // Update accumulated text
-        state.setAccumulatedText(recognizedText);
+        // 合并多次 VAD 切段，防抖后再统一触发面试官回复（避免句中停顿就一问一答）
+        state.appendFinalSttSegment(recognizedText);
+        sendSubtitle(session, state.getMergeBufferPreview(), false);
+        scheduleMergedUtteranceFlush(sessionId);
+    }
 
-        // Check if user finished speaking
-        if (isUserFinishedSpeaking(recognizedText)) {
-            log.info("User finished speaking for session {}, triggering LLM", sessionId);
+    /**
+     * 在「最后一次 STT 定稿」后再等待 debounce，然后一次性调用 LLM。
+     */
+    private void scheduleMergedUtteranceFlush(String sessionId) {
+        SessionState state = sessionStates.get(sessionId);
+        if (state == null) {
+            return;
+        }
+        state.cancelPendingUtteranceFlush();
+        int debounceMs = Math.max(200, voiceInterviewProperties.getUserUtteranceDebounceMs());
+        ScheduledFuture<?> future = utteranceMergeScheduler.schedule(
+                () -> flushMergedUtteranceToLlm(sessionId),
+                debounceMs,
+                TimeUnit.MILLISECONDS);
+        state.setPendingUtteranceFlush(future);
+    }
 
-            // Prevent duplicate LLM calls
-            if (state.isProcessing().compareAndSet(false, true)) {
-                try {
-                    triggerLlmResponse(sessionId, session, state);
-                } finally {
-                    state.isProcessing().set(false);
-                }
+    private void flushMergedUtteranceToLlm(String sessionId) {
+        WebSocketSession session = sessions.get(sessionId);
+        SessionState state = sessionStates.get(sessionId);
+        if (session == null || state == null || !session.isOpen()) {
+            return;
+        }
+        if (!state.isProcessing().compareAndSet(false, true)) {
+            utteranceMergeScheduler.schedule(
+                    () -> flushMergedUtteranceToLlm(sessionId),
+                    400,
+                    TimeUnit.MILLISECONDS);
+            return;
+        }
+        try {
+            String userText = state.takeMergeBufferAndClear();
+            if (userText == null || userText.trim().isEmpty()) {
+                return;
             }
+            state.setAccumulatedText(userText);
+            log.info("Merged user utterance for session {}, triggering LLM (length {})", sessionId, userText.length());
+            triggerLlmResponse(sessionId, session, state);
+        } finally {
+            state.isProcessing().set(false);
         }
     }
 
@@ -561,19 +671,6 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * Check if user finished speaking using simple heuristic
-     * MVP: End with sentence-ending punctuation (。？！)
-     */
-    private boolean isUserFinishedSpeaking(String text) {
-        if (text == null || text.isEmpty()) {
-            return false;
-        }
-        String trimmed = text.trim();
-        return trimmed.endsWith("。") || trimmed.endsWith("?") || trimmed.endsWith("!")
-                || trimmed.endsWith("？") || trimmed.endsWith("！");
-    }
-
-    /**
      * Get chat history for session
      * Load conversation history from database
      */
@@ -688,6 +785,40 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler {
     private static class SessionState {
         private final AtomicReference<String> accumulatedText = new AtomicReference<>("");
         private final AtomicBoolean processing = new AtomicBoolean(false);
+        /** 多段 STT completed 拼接，防抖后再送 LLM */
+        private final AtomicReference<String> mergeBuffer = new AtomicReference<>("");
+        private final AtomicReference<ScheduledFuture<?>> pendingUtteranceFlush = new AtomicReference<>();
+
+        void appendFinalSttSegment(String segment) {
+            String s = segment == null ? "" : segment.trim();
+            if (s.isEmpty()) {
+                return;
+            }
+            mergeBuffer.updateAndGet(prev -> prev.isEmpty() ? s : prev + s);
+        }
+
+        String getMergeBufferPreview() {
+            String s = mergeBuffer.get();
+            return s == null ? "" : s;
+        }
+
+        String takeMergeBufferAndClear() {
+            return mergeBuffer.getAndSet("");
+        }
+
+        void cancelPendingUtteranceFlush() {
+            ScheduledFuture<?> f = pendingUtteranceFlush.getAndSet(null);
+            if (f != null) {
+                f.cancel(false);
+            }
+        }
+
+        void setPendingUtteranceFlush(ScheduledFuture<?> future) {
+            ScheduledFuture<?> prev = pendingUtteranceFlush.getAndSet(future);
+            if (prev != null) {
+                prev.cancel(false);
+            }
+        }
 
         public String getAccumulatedText() {
             return accumulatedText.get();

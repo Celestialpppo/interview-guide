@@ -39,7 +39,7 @@ import static org.mockito.Mockito.*;
 class DashscopeLlmServiceTest {
 
     @Mock
-    private ChatClient.Builder chatClientBuilder;
+    private interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
 
     @Mock
     private ChatClient chatClient;
@@ -57,8 +57,7 @@ class DashscopeLlmServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(chatClientBuilder.build()).thenReturn(chatClient);
-        dashscopeLlmService = new DashscopeLlmService(chatClientBuilder, promptService, resumeRepository);
+        dashscopeLlmService = new DashscopeLlmService(llmProviderRegistry, promptService, resumeRepository);
         // Setup mock role prompt
         mockRolePrompt = new RolePrompt();
         mockRolePrompt.setRoleType("ali-p8");
@@ -68,6 +67,7 @@ class DashscopeLlmServiceTest {
         mockSession = VoiceInterviewSessionEntity.builder()
                 .id(1L)
                 .roleType("ali-p8")
+                .llmProvider("dashscope")
                 .currentPhase(VoiceInterviewSessionEntity.InterviewPhase.INTRO)
                 .build();
 
@@ -85,8 +85,10 @@ class DashscopeLlmServiceTest {
             // Given
             String userInput = "请介绍一下你的项目经验";
             mockSession.setRoleType("byteance-algo");
+            mockSession.setLlmProvider("dashscope");
 
             when(promptService.generateSystemPromptWithContext(eq("byteance-algo"), any())).thenReturn("你是字节跳动算法面试官");
+            when(llmProviderRegistry.getChatClient(eq("dashscope"))).thenReturn(chatClient);
 
             // When & Then - 验证方法可以正常调用
             // 注意：由于 ChatClient 链式调用的复杂性，这里主要验证不抛出异常
@@ -99,6 +101,7 @@ class DashscopeLlmServiceTest {
 
             // Verify prompt service was called
             verify(promptService, times(1)).generateSystemPromptWithContext(eq("byteance-algo"), any());
+            verify(llmProviderRegistry, times(1)).getChatClient(eq("dashscope"));
         }
 
         @Test

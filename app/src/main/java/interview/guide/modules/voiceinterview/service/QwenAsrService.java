@@ -7,6 +7,7 @@ import com.alibaba.dashscope.audio.omni.OmniRealtimeModality;
 import com.alibaba.dashscope.audio.omni.OmniRealtimeParam;
 import com.alibaba.dashscope.audio.omni.OmniRealtimeTranscriptionParam;
 import com.alibaba.dashscope.exception.NoApiKeyException;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -84,6 +86,13 @@ public class QwenAsrService {
      */
     private final Map<String, AsrSession> sessions = new ConcurrentHashMap<>();
 
+    /** 防止同一 interview sessionId 上并发 stop/start；并在重连时与 {@link #sessionLocks} 配合 */
+    private final ConcurrentHashMap<String, Object> sessionLocks = new ConcurrentHashMap<>();
+
+    private Object lockForSession(String sessionId) {
+        return sessionLocks.computeIfAbsent(sessionId, k -> new Object());
+    }
+
     /**
      * Initialize the ASR service.
      * This method is automatically called by Spring after the service is constructed
@@ -110,11 +119,55 @@ public class QwenAsrService {
      * onResult callback will be invoked with the transcribed text.
      *
      * @param sessionId Unique identifier for this session
-     * @param onResult Callback invoked when transcription results are received
+     * @param onFinal Callback when a sentence/segment is finalized ({@code completed} event)
      * @param onError Callback invoked when errors occur
      * @throws IllegalStateException if session already exists or service not initialized
      */
-    public void startTranscription(String sessionId, Consumer<String> onResult, Consumer<Throwable> onError) {
+    public void startTranscription(String sessionId, Consumer<String> onFinal, Consumer<Throwable> onError) {
+        startTranscription(sessionId, onFinal, null, onError);
+    }
+
+    /**
+     * Same as {@link #startTranscription(String, Consumer, Consumer)} but forwards partial transcripts
+     * ({@code conversation.item.input_audio_transcription.text}) for live subtitles.
+     *
+     * @param onPartial May be null if partials are not needed
+     */
+    public void startTranscription(
+            String sessionId,
+            Consumer<String> onFinal,
+            Consumer<String> onPartial,
+            Consumer<Throwable> onError) {
+        synchronized (lockForSession(sessionId)) {
+            startTranscriptionLocked(sessionId, onFinal, onPartial, onError);
+        }
+    }
+
+    /**
+     * 停止旧连接并重新建立（用于 ASR WebSocket 被服务端关闭后恢复识别）。
+     */
+    public void restartTranscription(
+            String sessionId,
+            Consumer<String> onFinal,
+            Consumer<String> onPartial,
+            Consumer<Throwable> onError) {
+        synchronized (lockForSession(sessionId)) {
+            log.info("[Session: {}] Restarting DashScope ASR (stop + start)", sessionId);
+            stopTranscription(sessionId);
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            startTranscriptionLocked(sessionId, onFinal, onPartial, onError);
+        }
+    }
+
+    private void startTranscriptionLocked(
+            String sessionId,
+            Consumer<String> onFinal,
+            Consumer<String> onPartial,
+            Consumer<Throwable> onError) {
         if (sessions.containsKey(sessionId)) {
             throw new IllegalStateException("Session already exists: " + sessionId);
         }
@@ -127,6 +180,8 @@ public class QwenAsrService {
                     .apikey(apiKey)
                     .build();
 
+            final AtomicReference<OmniRealtimeConversation> conversationRef = new AtomicReference<>();
+
             // Create callback handler for WebSocket events
             OmniRealtimeCallback callback = new OmniRealtimeCallback() {
                 @Override
@@ -136,21 +191,30 @@ public class QwenAsrService {
 
                 @Override
                 public void onEvent(JsonObject message) {
-                    handleServerEvent(sessionId, message, onResult, onError);
+                    handleServerEvent(sessionId, message, onFinal, onPartial, onError);
                 }
 
                 @Override
                 public void onClose(int code, String reason) {
-                    log.debug("[Session: {}] WebSocket closed - code: {}, reason: {}", sessionId, code, reason);
-                    sessions.remove(sessionId);
+                    OmniRealtimeConversation closed = conversationRef.get();
+                    log.warn("[Session: {}] DashScope ASR WebSocket closed - code: {}, reason: {}",
+                            sessionId, code, reason);
+                    // 仅移除与本次连接对应的会话，避免重连后旧 onClose 误删新连接（典型「第三轮起无声」根因）
+                    sessions.compute(sessionId, (id, existing) -> {
+                        if (existing != null && closed != null && existing.getConversation() == closed) {
+                            return null;
+                        }
+                        return existing;
+                    });
                 }
             };
 
             // Create OmniRealtimeConversation instance
             OmniRealtimeConversation conversation = new OmniRealtimeConversation(param, callback);
+            conversationRef.set(conversation);
 
             // Store session in map BEFORE connecting to ensure hasActiveSession() returns true
-            sessions.put(sessionId, new AsrSession(conversation, onResult, onError));
+            sessions.put(sessionId, new AsrSession(conversation, onFinal, onPartial, onError));
 
             // Connect to server asynchronously (non-blocking)
             Thread connectionThread = new Thread(() -> {
@@ -179,7 +243,12 @@ public class QwenAsrService {
 
                 } catch (Exception e) {
                     log.error("[Session: {}] Failed to establish connection", sessionId, e);
-                    sessions.remove(sessionId);
+                    sessions.compute(sessionId, (id, existing) -> {
+                        if (existing != null && existing.getConversation() == conversation) {
+                            return null;
+                        }
+                        return existing;
+                    });
                     onError.accept(e);
                 }
             }, "ASR-Connection-" + sessionId);
@@ -224,8 +293,9 @@ public class QwenAsrService {
             log.trace("[Session: {}] Sent {} bytes of audio data", sessionId, audioData.length);
 
         } catch (Exception e) {
-            log.error("[Session: {}] Failed to send audio data", sessionId, e);
-            session.getOnError().accept(e);
+            log.error("[Session: {}] appendAudio failed (upstream may reconnect)", sessionId, e);
+            // 抛出以便 WebSocket 层执行 restartTranscription；不在此重复 onError 避免用户先看到红条再恢复
+            throw new IllegalStateException("ASR append failed: " + sessionId, e);
         }
     }
 
@@ -238,29 +308,27 @@ public class QwenAsrService {
      * @param sessionId Session identifier
      */
     public void stopTranscription(String sessionId) {
-        AsrSession session = sessions.remove(sessionId);
-        if (session == null) {
-            log.warn("[Session: {}] Attempted to stop non-existent session", sessionId);
-            return;
-        }
+        synchronized (lockForSession(sessionId)) {
+            AsrSession session = sessions.remove(sessionId);
+            if (session == null) {
+                log.warn("[Session: {}] Attempted to stop non-existent session", sessionId);
+                return;
+            }
 
-        try {
-            // Notify server to finish transcription
-            session.getConversation().endSession();
-
-            log.info("[Session: {}] Transcription session stopped", sessionId);
-
-        } catch (InterruptedException e) {
-            log.error("[Session: {}] Thread interrupted while ending session", sessionId, e);
-            Thread.currentThread().interrupt();
-        } catch (Exception e) {
-            log.error("[Session: {}] Error while stopping session", sessionId, e);
-        } finally {
-            // Ensure connection is closed
             try {
-                session.getConversation().close();
+                session.getConversation().endSession();
+                log.info("[Session: {}] Transcription session stopped", sessionId);
+            } catch (InterruptedException e) {
+                log.error("[Session: {}] Thread interrupted while ending session", sessionId, e);
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
-                log.error("[Session: {}] Error closing connection", sessionId, e);
+                log.error("[Session: {}] Error while stopping session", sessionId, e);
+            } finally {
+                try {
+                    session.getConversation().close();
+                } catch (Exception e) {
+                    log.error("[Session: {}] Error closing connection", sessionId, e);
+                }
             }
         }
     }
@@ -305,16 +373,21 @@ public class QwenAsrService {
      * - session.created: Session successfully created
      * - session.updated: Session configuration updated
      * - conversation.item.input_audio_transcription.completed: Final transcription result
-     * - conversation.item.input_audio_transcription.text: Partial transcription result (ignored)
+     * - conversation.item.input_audio_transcription.text / .delta: Partial transcription (live subtitles)
      * - error: Error occurred
      *
      * @param sessionId Session identifier
      * @param message JSON event message from server
-     * @param onResult Callback for transcription results
+     * @param onFinal Callback for finalized segment text
+     * @param onPartial Callback for streaming partial text (optional)
      * @param onError Callback for errors
      */
-    private void handleServerEvent(String sessionId, JsonObject message,
-                                    Consumer<String> onResult, Consumer<Throwable> onError) {
+    private void handleServerEvent(
+            String sessionId,
+            JsonObject message,
+            Consumer<String> onFinal,
+            Consumer<String> onPartial,
+            Consumer<Throwable> onError) {
         try {
             String eventType = message.get("type").getAsString();
 
@@ -341,13 +414,12 @@ public class QwenAsrService {
                     log.debug("[Session: {}] Transcription completed - language: {}, emotion: {}, text: {}",
                             sessionId, language, emotion, transcript);
 
-                    // Invoke callback with final result
-                    onResult.accept(transcript);
+                    onFinal.accept(transcript);
                     break;
 
                 case "conversation.item.input_audio_transcription.text":
-                    // Partial transcription result (ignored - we only use final results)
-                    log.trace("[Session: {}] Partial transcription received", sessionId);
+                case "conversation.item.input_audio_transcription.delta":
+                    dispatchPartialTranscript(sessionId, message, onPartial);
                     break;
 
                 case "error":
@@ -367,8 +439,16 @@ public class QwenAsrService {
                     log.debug("[Session: {}] Session finished on server", sessionId);
                     break;
 
+                case "conversation.item.input_audio_transcription.failed":
+                    log.error("[Session: {}] ASR transcription failed (single utterance): {}", sessionId, message);
+                    break;
+
                 default:
-                    log.trace("[Session: {}] Unhandled event type: {}", sessionId, eventType);
+                    if (eventType != null && eventType.contains("transcription")) {
+                        log.debug("[Session: {}] Unhandled transcription-related event: {}", sessionId, message);
+                    } else {
+                        log.trace("[Session: {}] Unhandled event type: {}", sessionId, eventType);
+                    }
             }
 
         } catch (Exception e) {
@@ -378,27 +458,97 @@ public class QwenAsrService {
     }
 
     /**
+     * Forward partial / streaming ASR text for real-time UI (VAD alone does not imply visible STT).
+     */
+    private void dispatchPartialTranscript(
+            String sessionId, JsonObject message, Consumer<String> onPartial) {
+        if (onPartial == null) {
+            log.trace("[Session: {}] Partial transcription received (no consumer)", sessionId);
+            return;
+        }
+        String text = extractTranscriptPayload(message);
+        if (text != null && !text.isBlank()) {
+            onPartial.accept(text);
+        } else {
+            log.trace("[Session: {}] Partial ASR event without extractable text: {}", sessionId, message);
+        }
+    }
+
+    /**
+     * Extract displayable text from ASR JSON events.
+     * <p>
+     * For {@code conversation.item.input_audio_transcription.text}, the official preview is
+     * {@code text} (confirmed prefix) + {@code stash} (draft suffix); either may be empty.
+     * </p>
+     */
+    static String extractTranscriptPayload(JsonObject message) {
+        if (message.has("transcript") && !message.get("transcript").isJsonNull()) {
+            JsonElement el = message.get("transcript");
+            if (el.isJsonPrimitive()) {
+                return el.getAsString();
+            }
+        }
+        // Real-time partial: text + stash (see Alibaba qwen-asr-realtime server events doc)
+        if (message.has("text") || message.has("stash")) {
+            String prefix = "";
+            String suffix = "";
+            if (message.has("text") && !message.get("text").isJsonNull() && message.get("text").isJsonPrimitive()) {
+                prefix = message.get("text").getAsString();
+            }
+            if (message.has("stash") && !message.get("stash").isJsonNull() && message.get("stash").isJsonPrimitive()) {
+                suffix = message.get("stash").getAsString();
+            }
+            String combined = prefix + suffix;
+            if (!combined.isBlank()) {
+                return combined;
+            }
+        }
+        if (message.has("delta")) {
+            JsonElement d = message.get("delta");
+            if (d.isJsonPrimitive()) {
+                return d.getAsString();
+            }
+            if (d.isJsonObject()) {
+                JsonObject o = d.getAsJsonObject();
+                if (o.has("text") && !o.get("text").isJsonNull()) {
+                    return o.get("text").getAsString();
+                }
+                if (o.has("transcript") && !o.get("transcript").isJsonNull()) {
+                    return o.get("transcript").getAsString();
+                }
+            }
+        }
+        if (message.has("item") && message.get("item").isJsonObject()) {
+            JsonObject item = message.getAsJsonObject("item");
+            if (item.has("transcript") && !item.get("transcript").isJsonNull()) {
+                return item.get("transcript").getAsString();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Internal class to hold session data.
      */
     private static class AsrSession {
         private final OmniRealtimeConversation conversation;
-        private final Consumer<String> onResult;
+        private final Consumer<String> onFinal;
+        private final Consumer<String> onPartial;
         private final Consumer<Throwable> onError;
 
-        public AsrSession(OmniRealtimeConversation conversation,
-                          Consumer<String> onResult,
-                          Consumer<Throwable> onError) {
+        AsrSession(
+                OmniRealtimeConversation conversation,
+                Consumer<String> onFinal,
+                Consumer<String> onPartial,
+                Consumer<Throwable> onError) {
             this.conversation = conversation;
-            this.onResult = onResult;
+            this.onFinal = onFinal;
+            this.onPartial = onPartial;
             this.onError = onError;
         }
 
         public OmniRealtimeConversation getConversation() {
             return conversation;
-        }
-
-        public Consumer<String> getOnResult() {
-            return onResult;
         }
 
         public Consumer<Throwable> getOnError() {

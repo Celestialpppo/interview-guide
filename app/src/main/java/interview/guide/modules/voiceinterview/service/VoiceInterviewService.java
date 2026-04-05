@@ -65,6 +65,7 @@ public class VoiceInterviewService {
                 .techEnabled(request.getTechEnabled())
                 .projectEnabled(request.getProjectEnabled())
                 .hrEnabled(request.getHrEnabled())
+                .llmProvider(request.getLlmProvider())
                 .plannedDuration(request.getPlannedDuration())
                 .currentPhase(determineFirstPhase(request))
                 .build();

@@ -32,19 +32,22 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
     private final AnswerEvaluationService evaluationService;
     private final InterviewPersistenceService persistenceService;
     private final ObjectMapper objectMapper;
+    private final interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
 
     public EvaluateStreamConsumer(
         RedisService redisService,
         InterviewSessionRepository sessionRepository,
         AnswerEvaluationService evaluationService,
         InterviewPersistenceService persistenceService,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry
     ) {
         super(redisService);
         this.sessionRepository = sessionRepository;
         this.evaluationService = evaluationService;
         this.persistenceService = persistenceService;
         this.objectMapper = objectMapper;
+        this.llmProviderRegistry = llmProviderRegistry;
     }
 
     record EvaluatePayload(String sessionId) {}
@@ -119,8 +122,14 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
             }
         }
 
+        // 获取 LLM 客户端
+        String provider = session.getLlmProvider();
+        org.springframework.ai.chat.client.ChatClient chatClient = (provider != null && !provider.isBlank())
+            ? llmProviderRegistry.getChatClient(provider)
+            : llmProviderRegistry.getDefaultChatClient();
+
         String resumeText = session.getResume().getResumeText();
-        InterviewReportDTO report = evaluationService.evaluateInterview(sessionId, resumeText, questions);
+        InterviewReportDTO report = evaluationService.evaluateInterview(chatClient, sessionId, resumeText, questions);
         persistenceService.saveReport(sessionId, report);
     }
 

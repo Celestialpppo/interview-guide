@@ -265,12 +265,12 @@ spring:
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:interview_guide}
     username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:123456}
+    password: ${POSTGRES_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: create #首次启动用 create，表创建成功后，改回 update
+      ddl-auto: update # 首次启动自动创建表，后续保留数据并增量更新
 
   # Redisson配置 (使用 spring.redis.redisson，参考官方文档)
   redis:
@@ -293,8 +293,8 @@ app:
       batch-size: ${APP_INTERVIEW_EVALUATION_BATCH_SIZE:8} # 回答评估分批大小
   storage:
     endpoint: ${APP_STORAGE_ENDPOINT:http://localhost:9000}
-    access-key: ${APP_STORAGE_ACCESS_KEY:wr45VXJZhCxc6FAWz0YR}
-    secret-key: ${APP_STORAGE_SECRET_KEY:GtKxV57WJkpw4CvASPBzTy2DYElLnRqh8dIXQa0m}
+    access-key: ${APP_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${APP_STORAGE_SECRET_KEY:minioadmin}
     bucket: ${APP_STORAGE_BUCKET:interview-guide}
     region: ${APP_STORAGE_REGION:us-east-1}
 
@@ -304,10 +304,12 @@ app:
 
 ⚠️**注意**：
 
-1. JPA 的 `ddl-auto` 首次启动用 `create`，表创建成功后，改回 `update`。
-2. 如果本地有 Minio 的话，可以用其替换 RusfFS。
+1. JPA 的 `ddl-auto` 已配置为 `update`（智能模式），首次启动会自动创建表，后续重启保留数据。
+2. 如果本地有 Minio 的话，可以用其替换 RustFS。
 
 ### 5. 启动服务
+
+若使用本仓库的 **Docker 只启动依赖**（PostgreSQL / Redis / MinIO），可先执行 `docker compose up -d postgres redis minio createbuckets`，将根目录 **`.env.example` 复制为 `.env`** 并填写 `AI_BAILIAN_API_KEY`，再运行后端；默认账号与 `docker-compose.yml` 一致。需要显式启用 `application-dev.yml` 时，可使用 `./gradlew bootRun --args='--spring.profiles.active=dev'`。
 
 **后端：**
 
@@ -338,6 +340,8 @@ pnpm dev
 
 ### 2. 快速启动
 在项目根目录下执行：
+
+`.env.example` 中的 PostgreSQL、Redis、MinIO 已与 `docker-compose.yml` 对齐（数据库用户 `postgres` / 密码 `password`，MinIO `minioadmin` / `minioadmin`）。复制为 `.env` 后主要填写 `AI_BAILIAN_API_KEY`；若你曾在旧版本中使用过不同的库密码或对象存储密钥，请同步修改 `.env`，必要时重建 Postgres 卷以免旧数据与密码不一致。
 
 ```bash
 # 1. 复制环境变量配置文件
@@ -397,30 +401,24 @@ docker image prune -f
 
 ### Q: 数据库表创建失败/数据丢失
 
-这大概率是 JPA 的 `ddl-auto` 配置不对的原因。`ddl-auto` 模式对比：
+检查 JPA 的 `ddl-auto` 配置。`ddl-auto` 模式对比：
 
-| 模式     | 行为                            | 适用场景      |
-| -------- | ------------------------------- | ------------- |
-| create   | 无条件删除并重建所有表          | 开发/测试环境 |
-| update   | 对比现有 schema，只执行增量更新 | 开发环境      |
-| validate | 只验证，不修改                  | 生产环境      |
-| none     | 什么都不做                      | 生产环境      |
+| 模式     | 行为                            | 适用场景      | 数据保留 |
+| -------- | ------------------------------- | ------------- | -------- |
+| **update** | 智能模式：表不存在自动创建，存在则增量更新 | **开发环境（推荐）** | ✅ 保留 |
+| create   | 无条件删除并重建所有表          | 仅首次建表时使用 | ❌ 删除 |
+| validate | 只验证，不修改                  | 生产环境      | ✅ 保留 |
+| none     | 什么都不做                      | 生产环境      | ✅ 保留 |
 
-对于新数据库，推荐：
+**推荐配置（已默认）**：
 
 ```yaml
-# 首次启动用 create
 jpa:
   hibernate:
-    ddl-auto: create
-
-# 表创建成功后，改回 update
-jpa:
-  hibernate:
-    ddl-auto: update
+    ddl-auto: update  # 首次启动自动创建表，后续保留数据并增量更新
 ```
 
-记得改回 **update**，否则每次重启都会删除所有数据！
+⚠️ **注意**：避免使用 `create` 模式，否则每次重启都会删除所有数据！
 
 ### Q: 知识库向量化失败
 
@@ -451,6 +449,25 @@ spring:
 - 字体文件是否存在：`app/src/main/resources/fonts/ZhuqueFangsong-Regular.ttf`
 - 检查日志中的字体加载信息
 - 确认 iText 依赖是否正确
+
+### Q: Windows PowerShell 下后端日志中文乱码？
+
+**原因简述**：后端与 Logback 按 **UTF-8** 输出日志；中文 Windows 下控制台默认多为 **GBK（代码页 936）**，且 PowerShell 的 `$OutputEncoding`、控制台编码若未统一为 UTF-8，显示时就会把同一串字节解释错，出现乱码。
+
+**本项目已做的配置**（一般无需再改）：根目录 `gradle.properties`（Gradle 进程 UTF-8）、`app/src/main/resources/logback-spring.xml`（控制台日志 UTF-8）、`app/build.gradle` 中 `bootRun` 的 JVM 参数（含 `file.encoding` / `stdout.encoding` / `stderr.encoding`）。
+
+**仍乱码时（PowerShell 侧）**：在启动 `./gradlew bootRun` 的同一终端先执行下面一段；或写入 **PowerShell 配置文件**（`$PROFILE`）以便每次自动生效：
+
+```powershell
+chcp 65001 | Out-Null
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+```
+
+新建或编辑配置文件：`if (!(Test-Path $PROFILE)) { New-Item -Path $PROFILE -ItemType File -Force }`，再 `notepad $PROFILE` 将上述内容粘贴保存；新开终端后生效，或执行 `. $PROFILE` 立即加载。若提示脚本无法执行，可执行一次：`Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`。
+
+在 PowerShell 中建议使用 `.\gradlew.bat :app:bootRun`（或仓库根目录的 `.\gradlew.bat`），避免与执行策略、路径解析相关的问题。
 
 ## 贡献
 

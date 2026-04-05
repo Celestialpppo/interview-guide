@@ -16,7 +16,7 @@ export default function VoiceInterviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const roleType = queryParams.get('role') as CreateSessionRequest['roleType'];
+  const initialRoleType = queryParams.get('role') as CreateSessionRequest['roleType'];
 
   // UI state
   const [showPhaseModal, setShowPhaseModal] = useState(true);
@@ -33,12 +33,15 @@ export default function VoiceInterviewPage() {
   const [aiAudio, setAiAudio] = useState('');
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentRoleType, setCurrentRoleType] = useState<string>(initialRoleType || 'ali-p8');
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<VoiceInterviewWebSocket | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(null);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  /** AI 播报时不向 ASR 送麦，避免扬声器回声灌进识别、多轮后连接异常；抢话 onSpeechStart 或播完 onEnded 后恢复 */
+  const blockMicToServerRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -121,22 +124,34 @@ export default function VoiceInterviewPage() {
     return roleMap[role] || role;
   };
 
+  const handleRoleTypeChange = (newRoleType: string) => {
+    // Update current role type
+    setCurrentRoleType(newRoleType);
+    // Update URL to reflect the selected role type
+    const newUrl = `/voice-interview?role=${newRoleType}`;
+    window.history.replaceState({}, '', newUrl);
+  };
+
   const handlePhaseConfig = async (config: PhaseConfig) => {
     console.log('handlePhaseConfig called with config:', config);
-    console.log('roleType:', roleType);
+
+    // Use roleType from config, fallback to initialRoleType
+    const roleType = config.roleType || initialRoleType;
 
     if (!roleType) {
       setError('无效的面试角色');
       return;
     }
 
+    // Update current role type for display (URL already updated in handleRoleTypeChange)
+    setCurrentRoleType(roleType);
     setError(null);
     setConnectionStatus('connecting');
 
     try {
       console.log('Creating session...');
       const session = await voiceInterviewApi.createSession({
-        roleType: roleType,
+        roleType: roleType as 'ali-p8' | 'byteance-algo' | 'tencent-backend', // Type assertion
         introEnabled: false,
         techEnabled: config.techEnabled,
         projectEnabled: config.projectEnabled,
@@ -144,6 +159,7 @@ export default function VoiceInterviewPage() {
         plannedDuration: config.plannedDuration,
         customJdText: config.customJD,
         resumeId: config.resumeId,
+        llmProvider: config.llmProvider,
       });
 
       console.log('Session created:', session);
@@ -193,6 +209,7 @@ export default function VoiceInterviewPage() {
                 setAiAudio(audioData);
                 setAiText(text);
                 setIsAiSpeaking(true);
+                blockMicToServerRef.current = !!(audioData && audioData.length > 0);
               },
               onClose: (event) => {
                 console.log('WebSocket closed:', event);
@@ -232,6 +249,9 @@ export default function VoiceInterviewPage() {
   };
 
   const handleAudioData = (audioData: string) => {
+    if (blockMicToServerRef.current) {
+      return;
+    }
     if (wsRef.current && wsRef.current.isConnected()) {
       wsRef.current.sendAudio(audioData);
     } else {
@@ -241,6 +261,7 @@ export default function VoiceInterviewPage() {
 
   const handleSpeechStart = () => {
     console.log('[Page] User speaking, interrupt AI');
+    blockMicToServerRef.current = false;
 
     // Immediately stop AI audio
     if (audioPlayerRef.current && isAiSpeaking) {
@@ -331,7 +352,7 @@ export default function VoiceInterviewPage() {
   };
 
   // Validation
-  if (!roleType) {
+  if (!initialRoleType) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="text-center">
@@ -355,7 +376,8 @@ export default function VoiceInterviewPage() {
         isOpen={showPhaseModal}
         onClose={handleCloseModal}
         onStart={handlePhaseConfig}
-        roleType={getRoleLabel(roleType)}
+        roleType={currentRoleType}
+        onRoleTypeChange={handleRoleTypeChange}
       />
 
       {/* Header / Top Bar */}
@@ -372,7 +394,7 @@ export default function VoiceInterviewPage() {
             <Mic className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">{getRoleLabel(roleType)}</h1>
+            <h1 className="text-lg font-bold tracking-tight">{getRoleLabel(currentRoleType)}</h1>
             <div className="flex items-center gap-2">
               <span className="text-xs px-2 py-0.5 bg-primary-500/20 text-primary-400 rounded-full border border-primary-500/30">
                 {getPhaseLabel(currentPhase)}
@@ -545,6 +567,7 @@ export default function VoiceInterviewPage() {
           src={`data:audio/wav;base64,${aiAudio}`}
           onEnded={() => {
             setIsAiSpeaking(false);
+            blockMicToServerRef.current = false;
             if (aiText.trim()) {
               setMessages(prev => [
                 ...prev,

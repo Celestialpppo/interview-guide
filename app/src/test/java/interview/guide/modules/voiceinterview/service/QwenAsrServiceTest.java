@@ -1,5 +1,7 @@
 package interview.guide.modules.voiceinterview.service;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -113,6 +115,24 @@ class QwenAsrServiceTest {
         assertThrows(IllegalStateException.class, () -> {
             asrService.sendAudio("non-existent-session", audioData);
         });
+    }
+
+    @Test
+    @DisplayName("extractTranscriptPayload should concatenate text + stash for partial ASR events")
+    void extractTranscriptPayload_textAndStash() {
+        JsonObject o = JsonParser.parseString(
+                "{\"type\":\"conversation.item.input_audio_transcription.text\",\"text\":\"\",\"stash\":\"北京的\"}"
+        ).getAsJsonObject();
+        assertEquals("北京的", QwenAsrService.extractTranscriptPayload(o));
+    }
+
+    @Test
+    @DisplayName("extractTranscriptPayload should merge confirmed prefix and draft suffix")
+    void extractTranscriptPayload_mixedPrefixSuffix() {
+        JsonObject o = JsonParser.parseString(
+                "{\"type\":\"conversation.item.input_audio_transcription.text\",\"text\":\"今天天气不错，\",\"stash\":\"阳光\"}"
+        ).getAsJsonObject();
+        assertEquals("今天天气不错，阳光", QwenAsrService.extractTranscriptPayload(o));
     }
 
     @Test

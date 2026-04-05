@@ -31,7 +31,6 @@ public class InterviewQuestionService {
     
     private static final Logger log = LoggerFactory.getLogger(InterviewQuestionService.class);
     
-    private final ChatClient chatClient;
     private final PromptTemplate systemPromptTemplate;
     private final PromptTemplate userPromptTemplate;
     private final BeanOutputConverter<QuestionListDTO> outputConverter;
@@ -60,12 +59,10 @@ public class InterviewQuestionService {
     ) {}
     
     public InterviewQuestionService(
-            ChatClient.Builder chatClientBuilder,
             StructuredOutputInvoker structuredOutputInvoker,
             @Value("classpath:prompts/interview-question-system.st") Resource systemPromptResource,
             @Value("classpath:prompts/interview-question-user.st") Resource userPromptResource,
             @Value("${app.interview.follow-up-count:1}") int followUpCount) throws IOException {
-        this.chatClient = chatClientBuilder.build();
         this.structuredOutputInvoker = structuredOutputInvoker;
         this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
         this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
@@ -76,12 +73,13 @@ public class InterviewQuestionService {
     /**
      * 生成面试问题
      * 
+     * @param chatClient LLM客户端
      * @param resumeText 简历文本
      * @param questionCount 问题数量
      * @param historicalQuestions 历史问题列表（可选）
      * @return 面试问题列表
      */
-    public List<InterviewQuestionDTO> generateQuestions(String resumeText, int questionCount, List<String> historicalQuestions) {
+    public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount, List<String> historicalQuestions) {
         log.info("开始生成面试问题，简历长度: {}, 问题数量: {}, 历史问题数: {}", 
             resumeText.length(), questionCount, historicalQuestions != null ? historicalQuestions.size() : 0);
         
@@ -154,8 +152,8 @@ public class InterviewQuestionService {
     /**
      * 生成面试问题（不带历史问题）
      */
-    public List<InterviewQuestionDTO> generateQuestions(String resumeText, int questionCount) {
-        return generateQuestions(resumeText, questionCount, null);
+    public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount) {
+        return generateQuestions(chatClient, resumeText, questionCount, null);
     }
     
     /**

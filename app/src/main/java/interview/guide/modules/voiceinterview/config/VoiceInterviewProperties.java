@@ -19,6 +19,11 @@ public class VoiceInterviewProperties {
     private RateLimitConfig rateLimit = new RateLimitConfig();
     private AudioConfig audio = new AudioConfig();
 
+    /**
+     * 最后一次 STT 定稿后，再等待这么久才调用 LLM，用于把多次 VAD 切段合并成一轮回答。
+     */
+    private int userUtteranceDebounceMs = 1600;
+
     @Data
     public static class PhaseConfig {
         private DurationConfig intro = new DurationConfig(3, 5, 8, 2, 5);

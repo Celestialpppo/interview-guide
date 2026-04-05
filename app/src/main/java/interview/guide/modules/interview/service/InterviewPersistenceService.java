@@ -43,7 +43,8 @@ public class InterviewPersistenceService {
     @Transactional(rollbackFor = Exception.class)
     public InterviewSessionEntity saveSession(String sessionId, Long resumeId, 
                                               int totalQuestions, 
-                                              List<InterviewQuestionDTO> questions) {
+                                              List<InterviewQuestionDTO> questions,
+                                              String llmProvider) {
         try {
             Optional<ResumeEntity> resumeOpt = resumeRepository.findById(resumeId);
             if (resumeOpt.isEmpty()) {
@@ -57,9 +58,10 @@ public class InterviewPersistenceService {
             session.setCurrentQuestionIndex(0);
             session.setStatus(InterviewSessionEntity.SessionStatus.CREATED);
             session.setQuestionsJson(objectMapper.writeValueAsString(questions));
+            session.setLlmProvider(llmProvider != null ? llmProvider : "dashscope");
             
             InterviewSessionEntity saved = sessionRepository.save(session);
-            log.info("面试会话已保存: sessionId={}, resumeId={}", sessionId, resumeId);
+            log.info("面试会话已保存: sessionId={}, resumeId={}, llmProvider={}", sessionId, resumeId, llmProvider);
             
             return saved;
         } catch (JacksonException e) {
