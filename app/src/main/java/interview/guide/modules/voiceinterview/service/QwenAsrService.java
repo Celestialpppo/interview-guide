@@ -160,6 +160,24 @@ public class QwenAsrService {
                 Thread.currentThread().interrupt();
             }
             startTranscriptionLocked(sessionId, onFinal, onPartial, onError);
+
+            // Verify reconnection succeeded
+            for (int attempt = 0; attempt < 10; attempt++) {
+                try {
+                    Thread.sleep(100);
+                    AsrSession newSession = sessions.get(sessionId);
+                    if (newSession != null && newSession.getConversation() != null) {
+                        log.info("[Session: {}] ASR reconnection verified successfully", sessionId);
+                        return;
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("[Session: {}] ASR reconnection verification interrupted", sessionId);
+                    return;
+                }
+            }
+
+            log.warn("[Session: {}] ASR reconnection may not be fully ready after 1 second", sessionId);
         }
     }
 

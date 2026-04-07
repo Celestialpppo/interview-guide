@@ -1,11 +1,10 @@
 package interview.guide.modules.voiceinterview.service;
 
-import com.alibaba.dashscope.audio.omni.OmniRealtimeAudioFormat;
-import com.alibaba.dashscope.audio.omni.OmniRealtimeCallback;
-import com.alibaba.dashscope.audio.omni.OmniRealtimeConfig;
-import com.alibaba.dashscope.audio.omni.OmniRealtimeConversation;
-import com.alibaba.dashscope.audio.omni.OmniRealtimeModality;
-import com.alibaba.dashscope.audio.omni.OmniRealtimeParam;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtime;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeAudioFormat;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeCallback;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeConfig;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeParam;
 import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,42 +13,37 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Qwen3 Realtime TTS Service
+ * Qwen TTS Realtime Service (WebSocket-based)
  *
  * Provides real-time text-to-speech synthesis using Alibaba Cloud DashScope's
- * qwen3-tts-flash-realtime model. This service uses WebSocket-based real-time API
- * for low-latency speech synthesis.
+ * qwen-tts-realtime model via WebSocket API.
  *
  * Key Features:
+ * - WebSocket-based real-time TTS synthesis
+ * - User-commit mode for manual control
  * - Synchronous synthesis API with 30-second timeout protection
  * - Automatic audio chunk collection via response.audio.delta events
- * - Server-commit mode for reliable delivery
  * - Support for Chinese language with configurable voice, speech rate, and volume
  *
  * Configuration:
- * - Model: qwen3-tts-flash-realtime
- * - Voice: Cherry (Chinese female voice)
- * - Audio format: PCM, 16kHz sample rate
- * - Mode: server_commit
- * - Language: Chinese
+ * - Model: qwen-tts-realtime
+ * - Voice: Configurable (Cherry, Serena, Ethan, etc.)
+ * - Audio format: PCM, 24kHz sample rate
+ * - Mode: commit (user-controlled)
  *
- * @see OmniRealtimeConversation
- * @see OmniRealtimeCallback
+ * @see QwenTtsRealtime
+ * @see QwenTtsRealtimeCallback
  */
 @Slf4j
 @Service
 public class QwenTtsService {
 
-    // Configuration fields (injected via @Value from application.yml or reflection in tests)
-    @Value("${app.voice-interview.qwen.tts.url}")
-    private String url;
-
+    // Configuration fields (injected via @Value from application.yml)
     @Value("${app.voice-interview.qwen.tts.model}")
     private String model;
 
@@ -89,21 +83,22 @@ public class QwenTtsService {
         if (apiKey == null || apiKey.trim().isEmpty()) {
             throw new IllegalStateException("API key must be configured before initializing QwenTtsService");
         }
-        log.info("QwenTtsService initialized with model: {}, voice: {}, url: {}", model, voice, url);
+        log.info("QwenTtsService initialized with model: {}, voice: {}, sampleRate: {}Hz",
+                 model, voice, sampleRate);
     }
 
     /**
      * Synthesize text to speech audio.
      *
      * This method synchronously converts text to PCM audio data using the DashScope
-     * real-time TTS API. It establishes a WebSocket connection, sends the text for
+     * WebSocket-based TTS API. It establishes a WebSocket connection, sends the text for
      * synthesis, collects audio chunks, and returns the complete audio data.
      *
      * The method uses CountDownLatch to wait for synthesis completion with a 30-second
      * timeout to prevent indefinite blocking.
      *
      * @param text Text to synthesize (null, empty, or whitespace-only text returns empty array)
-     * @return PCM audio data at 16kHz sample rate, or empty array if synthesis fails
+     * @return PCM audio data at configured sample rate, or empty array if synthesis fails
      */
     public byte[] synthesize(String text) {
         // Handle null, empty, or whitespace-only text
@@ -123,16 +118,18 @@ public class QwenTtsService {
         // Error container
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
 
+        // Response ID container for tracking
+        AtomicReference<String> responseIdRef = new AtomicReference<>();
+
         try {
-            // Build OmniRealtimeParam with connection settings
-            OmniRealtimeParam param = OmniRealtimeParam.builder()
+            // Build QwenTtsRealtimeParam with connection settings
+            QwenTtsRealtimeParam param = QwenTtsRealtimeParam.builder()
                     .model(model)
-                    .url(url)
                     .apikey(apiKey)
                     .build();
 
             // Create callback handler for WebSocket events
-            OmniRealtimeCallback callback = new OmniRealtimeCallback() {
+            QwenTtsRealtimeCallback callback = new QwenTtsRealtimeCallback() {
                 @Override
                 public void onOpen() {
                     log.debug("TTS WebSocket connection established");
@@ -140,7 +137,7 @@ public class QwenTtsService {
 
                 @Override
                 public void onEvent(JsonObject message) {
-                    handleServerEvent(message, audioContainer, synthesisLatch, errorRef);
+                    handleServerEvent(message, audioContainer, synthesisLatch, errorRef, responseIdRef);
                 }
 
                 @Override
@@ -150,44 +147,32 @@ public class QwenTtsService {
                 }
             };
 
-            // Create OmniRealtimeConversation instance
-            OmniRealtimeConversation conversation = new OmniRealtimeConversation(param, callback);
+            // Create QwenTtsRealtime instance
+            QwenTtsRealtime qwenTtsRealtime = new QwenTtsRealtime(param, callback);
 
             try {
                 // Connect to server (blocking)
-                conversation.connect();
+                qwenTtsRealtime.connect();
 
                 // Configure session with TTS parameters
-                OmniRealtimeConfig config = OmniRealtimeConfig.builder()
-                        .modalities(Collections.singletonList(OmniRealtimeModality.AUDIO))
+                QwenTtsRealtimeConfig config = QwenTtsRealtimeConfig.builder()
                         .voice(voice)
-                        .outputAudioFormat(OmniRealtimeAudioFormat.PCM_16000HZ_MONO_16BIT)
-                        .enableTurnDetection(false) // TTS doesn't need VAD
+                        .responseFormat(getAudioFormat())
+                        .mode(mode)  // "commit" mode
+                        .languageType(languageType)
+                        .speechRate(speechRate)
+                        .volume(volume)
                         .build();
 
-                // Set additional TTS parameters via the parameters map
-                java.util.Map<String, Object> parameters = new java.util.HashMap<>();
-                parameters.put("language_type", languageType);
-                parameters.put("speech_rate", speechRate);
-                parameters.put("volume", volume);
-                parameters.put("mode", mode);
-                config.setParameters(parameters);
-
                 // Update session with configuration
-                conversation.updateSession(config);
+                qwenTtsRealtime.updateSession(config);
 
-                log.info("[TTS] Session configured, now triggering TTS synthesis for text: '{}'", text);
+                log.info("[TTS] Session configured with voice: {}, triggering synthesis for text (length: {})",
+                         voice, text.length());
 
-                // For Qwen3 TTS, send text via input_text_buffer.append and commit
-                // This follows the OpenAI Realtime API pattern
-                JsonObject appendMsg = new JsonObject();
-                appendMsg.addProperty("type", "input_text_buffer.append");
-                appendMsg.addProperty("text", text);
-                conversation.sendRaw(appendMsg.toString());
-
-                JsonObject commitMsg = new JsonObject();
-                commitMsg.addProperty("type", "input_text_buffer.commit");
-                conversation.sendRaw(commitMsg.toString());
+                // Send text for synthesis using commit mode
+                qwenTtsRealtime.appendText(text);
+                qwenTtsRealtime.commit();
 
                 log.info("[TTS] Text sent to TTS service, waiting for audio response...");
 
@@ -208,14 +193,15 @@ public class QwenTtsService {
 
                 // Return collected audio data
                 byte[] audioData = audioContainer.toByteArray();
-                log.debug("TTS synthesis completed - {} bytes of audio data", audioData.length);
+                log.info("[TTS] Synthesis completed successfully - {} bytes of audio data, responseId: {}",
+                         audioData.length, responseIdRef.get());
 
                 return audioData;
 
             } finally {
                 // Ensure connection is closed
                 try {
-                    conversation.close();
+                    qwenTtsRealtime.close();
                 } catch (Exception e) {
                     log.error("Error closing TTS connection", e);
                 }
@@ -229,6 +215,17 @@ public class QwenTtsService {
             log.error("Failed to synthesize text", e);
             return new byte[0];
         }
+    }
+
+    /**
+     * Get audio format for Qwen TTS Realtime.
+     * Currently supports 24kHz PCM format.
+     *
+     * @return QwenTtsRealtimeAudioFormat enum value
+     */
+    private QwenTtsRealtimeAudioFormat getAudioFormat() {
+        // Qwen TTS Realtime uses 24kHz by default
+        return QwenTtsRealtimeAudioFormat.PCM_24000HZ_MONO_16BIT;
     }
 
     /**
@@ -250,24 +247,33 @@ public class QwenTtsService {
      * - session.created: Session successfully created
      * - session.updated: Session configuration updated
      * - response.audio.delta: Audio chunk received
-     * - response.audio.done: Audio synthesis completed
+     * - response.done: Response completed
      * - error: Error occurred
      *
      * @param message JSON event message from server
      * @param audioContainer Container for collecting audio chunks
      * @param synthesisLatch Latch to signal completion
      * @param errorRef Container for error tracking
+     * @param responseIdRef Container for response ID tracking
      */
     private void handleServerEvent(JsonObject message, ByteArrayContainer audioContainer,
-                                    CountDownLatch synthesisLatch, AtomicReference<Throwable> errorRef) {
+                                    CountDownLatch synthesisLatch, AtomicReference<Throwable> errorRef,
+                                    AtomicReference<String> responseIdRef) {
         try {
             String eventType = message.get("type").getAsString();
 
-            log.debug("Received TTS event: {}, full message: {}", eventType, message);
+            if (log.isTraceEnabled()) {
+                log.trace("Received TTS event: {}, full message: {}", eventType, message);
+            } else {
+                log.debug("Received TTS event: {}", eventType);
+            }
 
             switch (eventType) {
                 case "session.created":
-                    log.debug("TTS session created on server");
+                    String sessionId = message.has("session") && message.get("session").isJsonObject()
+                            ? message.get("session").getAsJsonObject().get("id").getAsString()
+                            : "unknown";
+                    log.debug("TTS session created: {}", sessionId);
                     break;
 
                 case "session.updated":
@@ -286,9 +292,10 @@ public class QwenTtsService {
                     }
                     break;
 
-                case "response.audio.done":
-                    // Audio synthesis completed
-                    log.debug("TTS audio synthesis completed");
+                case "response.done":
+                    // Response completed - this is the final event in Qwen TTS API
+                    String responseId = responseIdRef.get();
+                    log.debug("TTS response completed - responseId: {}", responseId);
                     synthesisLatch.countDown();
                     break;
 
@@ -317,10 +324,6 @@ public class QwenTtsService {
                     }
                     break;
 
-                case "response.done":
-                    log.debug("TTS response completed");
-                    break;
-
                 default:
                     log.trace("Unhandled TTS event type: {}", eventType);
             }
@@ -333,29 +336,23 @@ public class QwenTtsService {
     }
 
     /**
-     * Internal class for dynamically growing byte array.
-     * Used to collect audio chunks from multiple response.audio.delta events.
+     * Internal class for efficiently collecting audio chunks.
+     * Uses ByteArrayOutputStream for amortized O(1) append performance
+     * instead of O(n²) copying with manual array growth.
      */
     private static class ByteArrayContainer {
-        private byte[] data = new byte[0];
+        private final java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
 
         public synchronized void append(byte[] chunk) {
-            byte[] newData = new byte[data.length + chunk.length];
-            System.arraycopy(data, 0, newData, 0, data.length);
-            System.arraycopy(chunk, 0, newData, data.length, chunk.length);
-            data = newData;
+            baos.write(chunk, 0, chunk.length);
         }
 
         public synchronized byte[] toByteArray() {
-            return data;
+            return baos.toByteArray();
         }
     }
 
     // Setter methods for configuration (used by Spring @Value injection or tests)
-
-    public void setUrl(String url) {
-        this.url = url;
-    }
 
     public void setModel(String model) {
         this.model = model;

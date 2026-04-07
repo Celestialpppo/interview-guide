@@ -509,56 +509,58 @@ export default function VoiceInterviewPage() {
         </div>
       </div>
 
-      {/* Footer Controls (Floating Dock) */}
-      <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50">
-        <div className="flex items-center gap-6 px-10 py-5 bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-          <button
-            onClick={() => {
-              const choice = window.confirm('暂停面试？\n确定 = 短暂停（5分钟）\n取消 = 离开并保存');
-              handlePause(choice ? 'short' : 'long');
-            }}
-            disabled={connectionStatus !== 'connected'}
-            className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-white/5 transition-all text-slate-400 hover:text-white"
-            title="暂停"
-          >
-            <Clock className="w-5 h-5" />
-          </button>
+      {/* Footer Controls (Floating Dock) - 只在面试开始后显示 */}
+      {!showPhaseModal && (
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-6 px-10 py-5 bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+            <button
+              onClick={() => {
+                const choice = window.confirm('暂停面试？\n确定 = 短暂停（5分钟）\n取消 = 离开并保存');
+                handlePause(choice ? 'short' : 'long');
+              }}
+              disabled={connectionStatus !== 'connected'}
+              className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-white/5 transition-all text-slate-400 hover:text-white"
+              title="暂停"
+            >
+              <Clock className="w-5 h-5" />
+            </button>
 
-          <div className="relative group">
-            <div className={`absolute -inset-4 bg-primary-500/20 rounded-full blur-xl transition-opacity duration-500 ${isRecording ? 'opacity-100' : 'opacity-0'}`} />
-            <div className="relative">
-              <AudioRecorder
-                isRecording={isRecording}
-                onRecordingChange={setIsRecording}
-                onAudioData={handleAudioData}
-                onSpeechStart={handleSpeechStart}
-                onSpeechEnd={handleSpeechEnd}
-              />
+            <div className="relative group">
+              <div className={`absolute -inset-4 bg-primary-500/20 rounded-full blur-xl transition-opacity duration-500 ${isRecording ? 'opacity-100' : 'opacity-0'}`} />
+              <div className="relative">
+                <AudioRecorder
+                  isRecording={isRecording}
+                  onRecordingChange={setIsRecording}
+                  onAudioData={handleAudioData}
+                  onSpeechStart={handleSpeechStart}
+                  onSpeechEnd={handleSpeechEnd}
+                />
+              </div>
             </div>
+
+            <button
+              onClick={handleEndInterview}
+              disabled={connectionStatus !== 'connected'}
+              className="w-12 h-12 rounded-full flex items-center justify-center bg-red-500/20 hover:bg-red-500 border border-red-500/50 transition-all text-red-500 hover:text-white"
+              title="结束面试"
+            >
+              <PhoneOff className="w-5 h-5" />
+            </button>
           </div>
 
-          <button
-            onClick={handleEndInterview}
-            disabled={connectionStatus !== 'connected'}
-            className="w-12 h-12 rounded-full flex items-center justify-center bg-red-500/20 hover:bg-red-500 border border-red-500/50 transition-all text-red-500 hover:text-white"
-            title="结束面试"
-          >
-            <PhoneOff className="w-5 h-5" />
-          </button>
+          {/* Subtle status hint */}
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-widest uppercase text-slate-500">
+             {isRecording ? (
+              <span className="text-primary-400 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-ping" />
+                正在聆听
+              </span>
+            ) : (
+              '点击麦克风发言'
+            )}
+          </div>
         </div>
-        
-        {/* Subtle status hint */}
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-widest uppercase text-slate-500">
-           {isRecording ? (
-            <span className="text-primary-400 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-ping" />
-              正在聆听
-            </span>
-          ) : (
-            '点击麦克风发言'
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Hidden audio player */}
       {aiAudio && (

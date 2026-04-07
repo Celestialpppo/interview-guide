@@ -198,22 +198,93 @@ class DashscopeLlmServiceTest {
 
             // Then
             assertNotNull(result);
-            assertEquals("抱歉，我刚才发生了一点错误。能再说一遍吗？", result);
+            assertTrue(result.contains("AI 服务") || result.contains("错误"),
+                    "Error message should be user-friendly and mention AI service");
         }
 
         @Test
-        @DisplayName("ChatClient 异常 - 返回默认消息")
-        void testChat_ChatClientError() {
+        @DisplayName("ChatClient 认证错误 - 返回特定错误消息")
+        void testChat_ChatClientAuthenticationError() {
             // Given
             String userInput = "测试";
-            when(chatClient.prompt()).thenThrow(new RuntimeException("ChatClient 错误"));
+            when(llmProviderRegistry.getChatClient(anyString()))
+                    .thenThrow(new RuntimeException("403 ACCESS_DENIED: Invalid API key"));
 
             // When
             String result = dashscopeLlmService.chat(userInput, mockSession, null);
 
             // Then
             assertNotNull(result);
-            assertEquals("抱歉，我刚才发生了一点错误。能再说一遍吗？", result);
+            assertTrue(result.contains("认证失败") || result.contains("API Key"),
+                    "Should return authentication error message");
+        }
+
+        @Test
+        @DisplayName("ChatClient 超时错误 - 返回超时错误消息")
+        void testChat_ChatClientTimeoutError() {
+            // Given
+            String userInput = "测试";
+            when(llmProviderRegistry.getChatClient(anyString()))
+                    .thenThrow(new RuntimeException("Request timeout after 30000ms"));
+
+            // When
+            String result = dashscopeLlmService.chat(userInput, mockSession, null);
+
+            // Then
+            assertNotNull(result);
+            assertTrue(result.contains("超时") || result.contains("timeout"),
+                    "Should return timeout error message");
+        }
+
+        @Test
+        @DisplayName("ChatClient 频率限制错误 - 返回限流错误消息")
+        void testChat_ChatClientRateLimitError() {
+            // Given
+            String userInput = "测试";
+            when(llmProviderRegistry.getChatClient(anyString()))
+                    .thenThrow(new RuntimeException("429 rate limit exceeded"));
+
+            // When
+            String result = dashscopeLlmService.chat(userInput, mockSession, null);
+
+            // Then
+            assertNotNull(result);
+            assertTrue(result.contains("频率") || result.contains("quota") || result.contains("超限"),
+                    "Should return rate limit error message");
+        }
+
+        @Test
+        @DisplayName("ChatClient 网络错误 - 返回网络错误消息")
+        void testChat_ChatClientNetworkError() {
+            // Given
+            String userInput = "测试";
+            when(llmProviderRegistry.getChatClient(anyString()))
+                    .thenThrow(new RuntimeException("connection refused: network error"));
+
+            // When
+            String result = dashscopeLlmService.chat(userInput, mockSession, null);
+
+            // Then
+            assertNotNull(result);
+            assertTrue(result.contains("网络") || result.contains("connection"),
+                    "Should return network error message");
+        }
+
+        @Test
+        @DisplayName("ChatClient 未知错误 - 返回通用错误消息")
+        void testChat_ChatClientUnknownError() {
+            // Given
+            String userInput = "测试";
+            when(llmProviderRegistry.getChatClient(anyString()))
+                    .thenThrow(new RuntimeException("Unknown error occurred"));
+
+            // When
+            String result = dashscopeLlmService.chat(userInput, mockSession, null);
+
+            // Then
+            assertNotNull(result);
+            assertTrue(result.contains("不可用") || result.contains("稍后"),
+                    "Should return generic error message for unknown errors");
         }
     }
 
@@ -257,14 +328,16 @@ class DashscopeLlmServiceTest {
             // Given
             String userInput = "测试流式错误";
             Consumer<String> onToken = token -> {};
-            when(chatClient.prompt()).thenThrow(new RuntimeException("API 错误"));
+            when(llmProviderRegistry.getChatClient(anyString()))
+                    .thenThrow(new RuntimeException("API 错误"));
 
             // When
             String result = dashscopeLlmService.chatStream(userInput, onToken, mockSession, null);
 
             // Then
             assertNotNull(result);
-            assertEquals("抱歉，我刚才发生了一点错误。能再说一遍吗？", result);
+            assertTrue(result.contains("不可用") || result.contains("稍后"),
+                    "Should return user-friendly error message");
         }
     }
 

@@ -296,7 +296,11 @@ public class VoiceInterviewService {
         VoiceInterviewSessionEntity saved = sessionRepository.save(session);
         cacheSession(saved);
 
-        log.info("Session {} resumed", sessionId);
+        // Load and verify conversation history for resumed session
+        List<VoiceInterviewMessageEntity> history =
+            messageRepository.findBySessionIdOrderBySequenceNumAsc(sessionIdLong);
+        log.info("Session {} resumed with {} messages in conversation history",
+            sessionId, history.size());
 
         return SessionResponseDTO.builder()
             .sessionId(saved.getId())

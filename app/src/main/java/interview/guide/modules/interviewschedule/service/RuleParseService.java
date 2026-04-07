@@ -91,24 +91,26 @@ public class RuleParseService {
             // 设置面试形式为视频
             request.setInterviewType("VIDEO");
 
-            log.info("飞书格式解析成功: {}", request);
-            return request;
-
         } catch (Exception e) {
             log.error("飞书格式解析失败", e);
-            // Log warnings for missing required fields
-            if (request.getCompanyName() == null) {
-                log.warn("Failed to extract company name from Feishu text");
-            }
-            if (request.getPosition() == null) {
-                log.warn("Failed to extract position from Feishu text");
-            }
-            if (request.getInterviewTime() == null) {
-                log.warn("Failed to extract interview time from Feishu text");
-            }
-            // Return partially parsed data instead of null
-            return request;
         }
+
+        // Validate required fields before returning
+        if (request.getInterviewTime() == null) {
+            log.error("Missing required field: interviewTime");
+            return null;
+        }
+        if (request.getCompanyName() == null) {
+            log.error("Missing required field: companyName");
+            return null;
+        }
+        if (request.getPosition() == null) {
+            log.error("Missing required field: position");
+            return null;
+        }
+
+        log.info("飞书格式解析成功: {}", request);
+        return request;
     }
 
     public CreateInterviewRequest parseTencent(String rawText) {
@@ -159,24 +161,26 @@ public class RuleParseService {
 
             request.setInterviewType("VIDEO");
 
-            log.info("腾讯会议格式解析成功: {}", request);
-            return request;
-
         } catch (Exception e) {
             log.error("腾讯会议格式解析失败", e);
-            // Log warnings for missing required fields
-            if (request.getCompanyName() == null) {
-                log.warn("Failed to extract company name from Tencent meeting text");
-            }
-            if (request.getPosition() == null) {
-                log.warn("Failed to extract position from Tencent meeting text");
-            }
-            if (request.getInterviewTime() == null) {
-                log.warn("Failed to extract interview time from Tencent meeting text");
-            }
-            // Return partially parsed data instead of null
-            return request;
         }
+
+        // Validate required fields before returning
+        if (request.getInterviewTime() == null) {
+            log.error("Missing required field: interviewTime");
+            return null;
+        }
+        if (request.getCompanyName() == null) {
+            log.error("Missing required field: companyName");
+            return null;
+        }
+        if (request.getPosition() == null) {
+            log.error("Missing required field: position");
+            return null;
+        }
+
+        log.info("腾讯会议格式解析成功: {}", request);
+        return request;
     }
 
     public CreateInterviewRequest parseZoom(String rawText) {
@@ -221,27 +225,29 @@ public class RuleParseService {
 
             request.setInterviewType("VIDEO");
 
-            log.info("Zoom 格式解析成功: {}", request);
-            return request;
-
         } catch (Exception e) {
             log.error("Zoom 格式解析失败", e);
-            // Log warnings for missing required fields
-            if (request.getCompanyName() == null) {
-                log.warn("Failed to extract company name from Zoom text");
-            }
-            if (request.getPosition() == null) {
-                log.warn("Failed to extract position from Zoom text");
-            }
-            if (request.getInterviewTime() == null) {
-                log.warn("Failed to extract interview time from Zoom text");
-            }
-            // Return partially parsed data instead of null
-            return request;
         }
+
+        // Validate required fields before returning
+        if (request.getInterviewTime() == null) {
+            log.error("Missing required field: interviewTime");
+            return null;
+        }
+        if (request.getCompanyName() == null) {
+            log.error("Missing required field: companyName");
+            return null;
+        }
+        if (request.getPosition() == null) {
+            log.error("Missing required field: position");
+            return null;
+        }
+
+        log.info("Zoom 格式解析成功: {}", request);
+        return request;
     }
 
-    private Integer parseRoundNumber(String roundText) {
+    Integer parseRoundNumber(String roundText) {
         // Extract Chinese numeral or digit
         Matcher matcher = ROUND_NUMBER_PATTERN.matcher(roundText);
 

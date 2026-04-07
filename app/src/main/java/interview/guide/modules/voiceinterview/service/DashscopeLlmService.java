@@ -78,7 +78,24 @@ public class DashscopeLlmService implements LlmService {
 
         } catch (Exception e) {
             log.error("LLM chat error for session {}: {}", session.getId(), e.getMessage(), e);
-            return "抱歉，我刚才发生了一点错误。能再说一遍吗？";
+
+            // Return specific error message based on exception type
+            String errorMessage = e.getMessage();
+            if (errorMessage != null) {
+                if (errorMessage.contains("403") || errorMessage.contains("ACCESS_DENIED") ||
+                    errorMessage.contains("Authentication")) {
+                    return "AI 服务认证失败，请检查 API Key 配置";
+                } else if (errorMessage.contains("timeout") || errorMessage.contains("Timeout")) {
+                    return "AI 服务响应超时，请稍后重试";
+                } else if (errorMessage.contains("429") || errorMessage.contains("rate limit") ||
+                           errorMessage.contains("quota")) {
+                    return "AI 服务调用频率超限，请稍后重试";
+                } else if (errorMessage.contains("connection") || errorMessage.contains("network")) {
+                    return "AI 服务网络连接失败，请检查网络";
+                }
+            }
+
+            return "抱歉，AI 服务暂时不可用，请稍后重试";
         }
     }
 

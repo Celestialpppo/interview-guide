@@ -189,15 +189,15 @@ app:
         # 静音多久判为一句结束；400 容易在句中停顿处切开，建议 900–1200
         turn-detection-silence-duration-ms: ${APP_VOICE_ASR_SILENCE_MS:1000}
 
-      # Qwen3 Realtime TTS Configuration
+      # Qwen TTS Realtime Configuration (WebSocket-based)
+      # 音色列表文档：https://help.aliyun.com/zh/model-studio/qwen-tts-realtime
       tts:
-        url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime
         model: qwen3-tts-flash-realtime
         api-key: ${AI_BAILIAN_API_KEY}
         voice: Cherry
         format: pcm
-        sample-rate: 16000
-        mode: server_commit
+        sample-rate: 24000
+        mode: commit
         language-type: Chinese
         speech-rate: 1.0
         volume: 60

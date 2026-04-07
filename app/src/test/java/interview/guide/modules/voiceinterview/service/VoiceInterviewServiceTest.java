@@ -1,5 +1,6 @@
 package interview.guide.modules.voiceinterview.service;
 
+import interview.guide.common.exception.BusinessException;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.dto.CreateSessionRequest;
 import interview.guide.modules.voiceinterview.dto.SessionResponseDTO;
@@ -256,6 +257,94 @@ class VoiceInterviewServiceTest {
 
             verify(sessionRepository, never()).findById(any());
             verify(sessionRepository, never()).save(any());
+        }
+    }
+
+    // ==================== 会话恢复测试 ====================
+
+    @Nested
+    @DisplayName("会话恢复测试")
+    class ResumeSessionTests {
+
+        @Test
+        @DisplayName("恢复会话 - 验证历史记录加载")
+        void testResumeSession_LoadsConversationHistory() {
+            // Given
+            Long sessionId = 1L;
+            VoiceInterviewSessionEntity pausedSession = VoiceInterviewSessionEntity.builder()
+                    .id(sessionId)
+                    .roleType("ali-p8")
+                    .currentPhase(VoiceInterviewSessionEntity.InterviewPhase.TECH)
+                    .status(VoiceInterviewSessionStatus.PAUSED)
+                    .startTime(LocalDateTime.now().minusMinutes(10))
+                    .plannedDuration(30)
+                    .build();
+
+            List<VoiceInterviewMessageEntity> history = Arrays.asList(
+                    createMessage(sessionId, 1, "用户：你好"),
+                    createMessage(sessionId, 2, "AI：你好，请自我介绍")
+            );
+
+            when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(pausedSession));
+            when(sessionRepository.save(any(VoiceInterviewSessionEntity.class))).thenReturn(pausedSession);
+            when(messageRepository.findBySessionIdOrderBySequenceNumAsc(sessionId)).thenReturn(history);
+
+            // When
+            SessionResponseDTO response = voiceInterviewService.resumeSession(sessionId.toString());
+
+            // Then
+            assertNotNull(response);
+            assertEquals(VoiceInterviewSessionStatus.IN_PROGRESS.name(), response.getStatus());
+            assertNotNull(response.getStartTime());
+            assertEquals(30, response.getPlannedDuration());
+
+            // Verify conversation history was loaded
+            verify(messageRepository, times(1)).findBySessionIdOrderBySequenceNumAsc(sessionId);
+            verify(sessionRepository, times(1)).save(argThat(session ->
+                    session.getStatus() == VoiceInterviewSessionStatus.IN_PROGRESS &&
+                    session.getResumedAt() != null
+            ));
+        }
+
+        @Test
+        @DisplayName("恢复会话 - 状态必须为PAUSED")
+        void testResumeSession_InvalidStatus() {
+            // Given
+            Long sessionId = 1L;
+            VoiceInterviewSessionEntity inProgressSession = VoiceInterviewSessionEntity.builder()
+                    .id(sessionId)
+                    .status(VoiceInterviewSessionStatus.IN_PROGRESS)
+                    .build();
+
+            when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(inProgressSession));
+
+            // When & Then
+            assertThrows(BusinessException.class, () ->
+                    voiceInterviewService.resumeSession(sessionId.toString())
+            );
+
+            verify(sessionRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("恢复会话 - 会话不存在")
+        void testResumeSession_SessionNotFound() {
+            // Given
+            Long sessionId = 999L;
+            when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+
+            // When & Then
+            assertThrows(BusinessException.class, () ->
+                    voiceInterviewService.resumeSession(sessionId.toString())
+            );
+        }
+
+        private VoiceInterviewMessageEntity createMessage(Long sessionId, int sequenceNum, String content) {
+            VoiceInterviewMessageEntity message = new VoiceInterviewMessageEntity();
+            message.setSessionId(sessionId);
+            message.setSequenceNum(sequenceNum);
+            message.setUserRecognizedText(content);
+            return message;
         }
     }
 

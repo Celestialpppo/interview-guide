@@ -187,19 +187,19 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         String sessionId = extractSessionId(session);
-        sessions.remove(sessionId);
-        SessionState removedState = sessionStates.remove(sessionId);
-        if (removedState != null) {
-            removedState.cancelPendingUtteranceFlush();
-        }
-        lastActivityTime.remove(sessionId);
-
-        // Stop STT transcription
         try {
+            sessions.remove(sessionId);
+            SessionState removedState = sessionStates.remove(sessionId);
+            if (removedState != null) {
+                removedState.cancelPendingUtteranceFlush();
+            }
+            lastActivityTime.remove(sessionId);
+
+            // Stop STT transcription
             sttService.stopTranscription(sessionId);
             log.info("WebSocket connection closed for session: {}, status: {}", sessionId, status);
         } catch (Exception e) {
-            log.error("Error stopping transcription for session {}", sessionId, e);
+            log.error("Error cleaning up session {} after close", sessionId, e);
         }
     }
 
@@ -424,11 +424,14 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             }
 
             if (aiAudio == null || aiAudio.length == 0) {
-                log.warn("TTS returned empty audio, using text-only response");
+                log.error("[Session: {}] TTS returned empty audio for text (length: {}), falling back to text-only response",
+                        sessionId, aiReply.length());
                 sendTextMessage(session, aiReply);
             } else {
                 // Convert PCM to WAV format for browser playback
                 byte[] wavAudio = convertPcmToWav(aiAudio);
+                log.info("[Session: {}] Sending audio to client - WAV size: {} bytes, text: '{}'",
+                        sessionId, wavAudio.length, aiReply.substring(0, Math.min(50, aiReply.length())));
                 sendAudio(session, wavAudio, aiReply);
             }
 
@@ -725,11 +728,12 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
      * Convert PCM audio to WAV format
      * Adds 44-byte WAV header to PCM data for browser playback
      *
-     * @param pcmData Raw PCM audio data (16kHz, 16-bit, mono)
+     * @param pcmData Raw PCM audio data (24kHz, 16-bit, mono)
      * @return WAV formatted audio data
      */
     private byte[] convertPcmToWav(byte[] pcmData) {
-        int sampleRate = 16000;
+        // Use 24000Hz for Qwen TTS Realtime API
+        int sampleRate = 24000;
         int bitsPerSample = 16;
         int numChannels = 1;
         int byteRate = sampleRate * numChannels * bitsPerSample / 8;
@@ -739,44 +743,50 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
         byte[] wavData = new byte[dataSize + 44];
 
-        try {
-            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+        // Write WAV header directly to avoid stream allocation overhead
+        int pos = 0;
 
-            // RIFF header
-            dos.writeBytes("RIFF");
-            dos.writeInt(Integer.reverseBytes(fileSize));
-            dos.writeBytes("WAVE");
+        // RIFF header
+        wavData[pos++] = 'R'; wavData[pos++] = 'I'; wavData[pos++] = 'F'; wavData[pos++] = 'F';
+        writeIntLE(wavData, pos, fileSize); pos += 4;
+        wavData[pos++] = 'W'; wavData[pos++] = 'A'; wavData[pos++] = 'V'; wavData[pos++] = 'E';
 
-            // fmt chunk
-            dos.writeBytes("fmt ");
-            dos.writeInt(Integer.reverseBytes(16)); // Chunk size
-            dos.writeShort(Short.reverseBytes((short) 1)); // Audio format (1 = PCM)
-            dos.writeShort(Short.reverseBytes((short) numChannels));
-            dos.writeInt(Integer.reverseBytes(sampleRate));
-            dos.writeInt(Integer.reverseBytes(byteRate));
-            dos.writeShort(Short.reverseBytes((short) blockAlign));
-            dos.writeShort(Short.reverseBytes((short) bitsPerSample));
+        // fmt chunk
+        wavData[pos++] = 'f'; wavData[pos++] = 'm'; wavData[pos++] = 't'; wavData[pos++] = ' ';
+        writeIntLE(wavData, pos, 16); pos += 4; // Chunk size
+        writeShortLE(wavData, pos, (short) 1); pos += 2; // Audio format (1 = PCM)
+        writeShortLE(wavData, pos, (short) numChannels); pos += 2;
+        writeIntLE(wavData, pos, sampleRate); pos += 4;
+        writeIntLE(wavData, pos, byteRate); pos += 4;
+        writeShortLE(wavData, pos, (short) blockAlign); pos += 2;
+        writeShortLE(wavData, pos, (short) bitsPerSample); pos += 2;
 
-            // data chunk
-            dos.writeBytes("data");
-            dos.writeInt(Integer.reverseBytes(dataSize));
+        // data chunk
+        wavData[pos++] = 'd'; wavData[pos++] = 'a'; wavData[pos++] = 't'; wavData[pos++] = 'a';
+        writeIntLE(wavData, pos, dataSize); pos += 4;
 
-            dos.flush();
-
-            // Copy header
-            byte[] header = baos.toByteArray();
-            System.arraycopy(header, 0, wavData, 0, header.length);
-
-            // Copy PCM data
-            System.arraycopy(pcmData, 0, wavData, 44, pcmData.length);
-
-        } catch (Exception e) {
-            log.error("Error converting PCM to WAV", e);
-            return pcmData; // Return original if conversion fails
-        }
+        // Copy PCM data
+        System.arraycopy(pcmData, 0, wavData, 44, pcmData.length);
 
         return wavData;
+    }
+
+    /**
+     * Write 32-bit integer in little-endian format
+     */
+    private static void writeIntLE(byte[] buf, int pos, int value) {
+        buf[pos] = (byte) (value & 0xFF);
+        buf[pos + 1] = (byte) ((value >> 8) & 0xFF);
+        buf[pos + 2] = (byte) ((value >> 16) & 0xFF);
+        buf[pos + 3] = (byte) ((value >> 24) & 0xFF);
+    }
+
+    /**
+     * Write 16-bit short in little-endian format
+     */
+    private static void writeShortLE(byte[] buf, int pos, short value) {
+        buf[pos] = (byte) (value & 0xFF);
+        buf[pos + 1] = (byte) ((value >> 8) & 0xFF);
     }
 
     /**
