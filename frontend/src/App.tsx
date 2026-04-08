@@ -270,17 +270,7 @@ function KnowledgeBaseUploadPageWrapper() {
 
 // 语音面试页面包装器
 function VoiceInterviewPageWrapper() {
-  const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const role = searchParams.get('role');
-
-  if (!role) {
-    return <Navigate to="/upload" replace />;
-  }
-
-  return (
-    <VoiceInterviewPage />
-  );
+  return <VoiceInterviewPage />;
 }
 
 export default App;

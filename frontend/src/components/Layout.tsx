@@ -37,7 +37,7 @@ export default function Layout() {
       id: 'voice',
       title: '语音面试',
       items: [
-        { id: 'voice-interview', path: '/voice-interview?role=ali-p8', label: '开始面试', icon: Mic, description: '实时语音对话' },
+        { id: 'voice-interview', path: '/voice-interview', label: '开始面试', icon: Mic, description: '实时语音对话' },
       ],
     },
     {

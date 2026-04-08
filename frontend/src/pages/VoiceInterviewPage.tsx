@@ -333,8 +333,7 @@ export default function VoiceInterviewPage() {
       }
     }
 
-    // Navigate to evaluation page
-    navigate(`/voice-interview/${sessionId}/evaluation`);
+    navigate('/interviews');
   };
 
   const handleCloseModal = () => {
@@ -374,9 +373,9 @@ export default function VoiceInterviewPage() {
       <div className="px-6 py-4 flex items-center justify-between bg-slate-900/50 backdrop-blur-md border-b border-white/10 z-10">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/upload')}
+            onClick={() => navigate('/interviews')}
             className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white mr-2"
-            title="返回首页"
+            title="返回面试记录"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -474,14 +473,23 @@ export default function VoiceInterviewPage() {
                  >
                    {userText}
                  </motion.p>
-               ) : (
+               ) : connectionStatus === 'connected' ? (
                  <motion.p
                    key="idle"
                    initial={{ opacity: 0 }}
                    animate={{ opacity: 0.5 }}
                    className="text-lg text-slate-500"
                  >
-                   等待对话开始...
+                   {isRecording ? '正在聆听...' : '点击下方麦克风开始发言'}
+                 </motion.p>
+               ) : (
+                 <motion.p
+                   key="connecting"
+                   initial={{ opacity: 0 }}
+                   animate={{ opacity: 0.5 }}
+                   className="text-lg text-slate-500"
+                 >
+                   正在连接面试官...
                  </motion.p>
                )}
              </AnimatePresence>
