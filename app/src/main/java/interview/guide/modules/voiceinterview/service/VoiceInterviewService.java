@@ -61,6 +61,7 @@ public class VoiceInterviewService {
     @Transactional
     public SessionResponseDTO createSession(CreateSessionRequest request) {
         VoiceInterviewSessionEntity session = VoiceInterviewSessionEntity.builder()
+                .userId("default")
                 .roleType(request.getRoleType())
                 .customJdText(request.getCustomJdText())
                 .resumeId(request.getResumeId())
