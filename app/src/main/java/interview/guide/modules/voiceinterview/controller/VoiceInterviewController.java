@@ -1,10 +1,17 @@
 package interview.guide.modules.voiceinterview.controller;
 
+import interview.guide.common.exception.BusinessException;
+import interview.guide.common.exception.ErrorCode;
+import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.common.result.Result;
 import interview.guide.modules.voiceinterview.dto.CreateSessionRequest;
 import interview.guide.modules.voiceinterview.dto.SessionMetaDTO;
 import interview.guide.modules.voiceinterview.dto.SessionResponseDTO;
+import interview.guide.modules.voiceinterview.dto.VoiceEvaluationDetailDTO;
+import interview.guide.modules.voiceinterview.dto.VoiceEvaluationStatusDTO;
+import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
+import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewEvaluationService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +28,7 @@ import java.util.Map;
  * REST API endpoints for voice interview session management:
  * - Session lifecycle (create, retrieve, end)
  * - Message history retrieval
- * - Evaluation generation and retrieval
+ * - Async evaluation trigger and status polling
  * </p>
  */
 @RestController
@@ -32,13 +39,10 @@ public class VoiceInterviewController {
 
     private final VoiceInterviewService voiceInterviewService;
     private final VoiceInterviewEvaluationService evaluationService;
+    private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
 
     /**
      * Create a new voice interview session
-     * 创建新的语音面试会话
-     *
-     * @param request Session creation request with role type and phase configuration
-     * @return SessionResponseDTO with session details and WebSocket URL
      */
     @PostMapping("/sessions")
     public Result<SessionResponseDTO> createSession(@RequestBody CreateSessionRequest request) {
@@ -49,10 +53,6 @@ public class VoiceInterviewController {
 
     /**
      * Get session details by ID
-     * 获取会话详情
-     *
-     * @param sessionId Session ID
-     * @return SessionResponseDTO with session details
      */
     @GetMapping("/sessions/{sessionId}")
     public Result<SessionResponseDTO> getSession(@PathVariable Long sessionId) {
@@ -66,10 +66,9 @@ public class VoiceInterviewController {
 
     /**
      * End interview session
-     * 结束面试会话
-     *
-     * @param sessionId Session ID
-     * @return Success result
+     * <p>
+     * This also triggers async evaluation via Redis Stream.
+     * </p>
      */
     @PostMapping("/sessions/{sessionId}/end")
     public Result<Void> endSession(@PathVariable Long sessionId) {
@@ -80,11 +79,6 @@ public class VoiceInterviewController {
 
     /**
      * Pause interview session
-     * 暂停面试会话
-     *
-     * @param sessionId Session ID
-     * @param request Pause request with reason
-     * @return Success result
      */
     @PutMapping("/sessions/{sessionId}/pause")
     public Result<Void> pauseSession(
@@ -99,10 +93,6 @@ public class VoiceInterviewController {
 
     /**
      * Resume interview session
-     * 恢复面试会话
-     *
-     * @param sessionId Session ID
-     * @return SessionResponseDTO with WebSocket URL
      */
     @PutMapping("/sessions/{sessionId}/resume")
     public Result<SessionResponseDTO> resumeSession(@PathVariable Long sessionId) {
@@ -113,11 +103,6 @@ public class VoiceInterviewController {
 
     /**
      * Get all sessions for user
-     * 获取用户所有会话
-     *
-     * @param userId User ID (optional)
-     * @param status Filter by status (optional)
-     * @return List of session metadata
      */
     @GetMapping("/sessions")
     public Result<List<SessionMetaDTO>> getAllSessions(
@@ -136,10 +121,6 @@ public class VoiceInterviewController {
 
     /**
      * Get conversation history for a session
-     * 获取会话的对话历史记录
-     *
-     * @param sessionId Session ID
-     * @return List of messages ordered by sequence number
      */
     @GetMapping("/sessions/{sessionId}/messages")
     public Result<List<VoiceInterviewMessageEntity>> getMessages(@PathVariable Long sessionId) {
@@ -150,30 +131,75 @@ public class VoiceInterviewController {
     }
 
     /**
-     * Get evaluation for a session
-     * 获取会话评估结果
-     *
-     * @param sessionId Session ID
-     * @return Evaluation result
+     * Get evaluation status and result for a session
+     * <p>
+     * Returns the current evaluation status (PENDING/PROCESSING/COMPLETED/FAILED)
+     * along with the evaluation result when COMPLETED.
+     * Frontend polls this endpoint until evaluation is complete.
+     * </p>
      */
     @GetMapping("/sessions/{sessionId}/evaluation")
-    public Result<Object> getEvaluation(@PathVariable Long sessionId) {
-        log.info("Getting evaluation for session: {}", sessionId);
-        Object evaluation = evaluationService.getEvaluation(sessionId);
-        return Result.success(evaluation);
+    public Result<VoiceEvaluationStatusDTO> getEvaluation(@PathVariable Long sessionId) {
+        log.info("Getting evaluation status for session: {}", sessionId);
+
+        VoiceInterviewSessionEntity session = voiceInterviewService.getSession(sessionId);
+        if (session == null) {
+            throw new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND, "会话不存在: " + sessionId);
+        }
+
+        AsyncTaskStatus status = session.getEvaluateStatus();
+        VoiceEvaluationStatusDTO.VoiceEvaluationStatusDTOBuilder builder = VoiceEvaluationStatusDTO.builder()
+                .evaluateStatus(status != null ? status.name() : null)
+                .evaluateError(session.getEvaluateError());
+
+        if (status == AsyncTaskStatus.COMPLETED) {
+            VoiceEvaluationDetailDTO evaluation = evaluationService.getEvaluation(sessionId);
+            builder.evaluation(evaluation);
+        }
+
+        return Result.success(builder.build());
     }
 
     /**
-     * Generate evaluation for a session
-     * 生成会话评估结果
-     *
-     * @param sessionId Session ID
-     * @return Generated evaluation result
+     * Trigger async evaluation for a session
+     * <p>
+     * Enqueues evaluation task to Redis Stream and returns immediately.
+     * Frontend should then poll GET /evaluation to track progress.
+     * If evaluation is already in progress or completed, returns current status.
+     * </p>
      */
     @PostMapping("/sessions/{sessionId}/evaluation")
-    public Result<Object> generateEvaluation(@PathVariable Long sessionId) {
-        log.info("Generating evaluation for session: {}", sessionId);
-        Object evaluation = evaluationService.generateEvaluation(sessionId);
-        return Result.success(evaluation);
+    public Result<VoiceEvaluationStatusDTO> generateEvaluation(@PathVariable Long sessionId) {
+        log.info("Triggering async evaluation for session: {}", sessionId);
+
+        VoiceInterviewSessionEntity session = voiceInterviewService.getSession(sessionId);
+        if (session == null) {
+            throw new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND, "会话不存在: " + sessionId);
+        }
+
+        // If already completed, return cached result
+        if (session.getEvaluateStatus() == AsyncTaskStatus.COMPLETED) {
+            VoiceEvaluationDetailDTO evaluation = evaluationService.getEvaluation(sessionId);
+            return Result.success(VoiceEvaluationStatusDTO.builder()
+                    .evaluateStatus(AsyncTaskStatus.COMPLETED.name())
+                    .evaluation(evaluation)
+                    .build());
+        }
+
+        // If already in progress, return current status
+        if (session.getEvaluateStatus() == AsyncTaskStatus.PENDING
+                || session.getEvaluateStatus() == AsyncTaskStatus.PROCESSING) {
+            return Result.success(VoiceEvaluationStatusDTO.builder()
+                    .evaluateStatus(session.getEvaluateStatus().name())
+                    .build());
+        }
+
+        // Trigger new async evaluation
+        session.setEvaluateStatus(AsyncTaskStatus.PENDING);
+        voiceEvaluateStreamProducer.sendEvaluateTask(sessionId.toString());
+
+        return Result.success(VoiceEvaluationStatusDTO.builder()
+                .evaluateStatus(AsyncTaskStatus.PENDING.name())
+                .build());
     }
 }

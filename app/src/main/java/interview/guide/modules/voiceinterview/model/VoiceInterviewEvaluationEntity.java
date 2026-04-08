@@ -8,6 +8,15 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * Voice Interview Evaluation Entity
+ * 语音面试评估实体
+ * <p>
+ * Stores evaluation results in a format aligned with text-based interviews:
+ * per-question evaluations, overall feedback, strengths, improvements, and reference answers.
+ * All structured data (arrays/objects) is stored as JSON TEXT columns.
+ * </p>
+ */
 @Entity
 @Table(name = "voice_interview_evaluations")
 @Data
@@ -26,38 +35,20 @@ public class VoiceInterviewEvaluationEntity {
     @Column(name = "overall_score")
     private Integer overallScore;
 
-    @Column(name = "overall_rating")
-    private String overallRating;
+    @Column(name = "overall_feedback", columnDefinition = "TEXT")
+    private String overallFeedback;
 
-    @Column(name = "tech_knowledge_score")
-    private Integer techKnowledgeScore;
+    @Column(name = "question_evaluations_json", columnDefinition = "TEXT")
+    private String questionEvaluationsJson;
 
-    @Column(name = "tech_knowledge_comment", columnDefinition = "TEXT")
-    private String techKnowledgeComment;
+    @Column(name = "strengths_json", columnDefinition = "TEXT")
+    private String strengthsJson;
 
-    @Column(name = "project_exp_score")
-    private Integer projectExpScore;
+    @Column(name = "improvements_json", columnDefinition = "TEXT")
+    private String improvementsJson;
 
-    @Column(name = "project_exp_comment", columnDefinition = "TEXT")
-    private String projectExpComment;
-
-    @Column(name = "communication_score")
-    private Integer communicationScore;
-
-    @Column(name = "communication_comment", columnDefinition = "TEXT")
-    private String communicationComment;
-
-    @Column(name = "logical_thinking_score")
-    private Integer logicalThinkingScore;
-
-    @Column(name = "logical_thinking_comment", columnDefinition = "TEXT")
-    private String logicalThinkingComment;
-
-    @Column(name = "improvement_suggestions", columnDefinition = "TEXT")
-    private String improvementSuggestions; // JSON array
-
-    @Column(name = "strengths_summary", columnDefinition = "TEXT")
-    private String strengthsSummary;
+    @Column(name = "reference_answers_json", columnDefinition = "TEXT")
+    private String referenceAnswersJson;
 
     @Column(name = "interviewer_role")
     private String interviewerRole;

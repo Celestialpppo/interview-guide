@@ -2,10 +2,12 @@ package interview.guide.modules.voiceinterview.service;
 
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
+import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.dto.CreateSessionRequest;
 import interview.guide.modules.voiceinterview.dto.SessionMetaDTO;
 import interview.guide.modules.voiceinterview.dto.SessionResponseDTO;
+import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionStatus;
@@ -44,6 +46,7 @@ public class VoiceInterviewService {
     private final VoiceInterviewMessageRepository messageRepository;
     private final RedissonClient redissonClient;
     private final VoiceInterviewProperties properties;
+    private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
 
     private static final String SESSION_CACHE_KEY_PREFIX = "voice:interview:session:";
     private static final int CACHE_TTL_HOURS = 1;
@@ -99,11 +102,14 @@ public class VoiceInterviewService {
         session.setCurrentPhase(VoiceInterviewSessionEntity.InterviewPhase.COMPLETED);
         session.setStatus(VoiceInterviewSessionStatus.COMPLETED);
         session.setActualDuration((int) Duration.between(session.getStartTime(), LocalDateTime.now()).toSeconds());
+        session.setEvaluateStatus(AsyncTaskStatus.PENDING);
 
         sessionRepository.save(session);
         invalidateSessionCache(sessionIdLong);
 
-        log.info("Ended voice interview session: {}, duration: {} seconds",
+        // Trigger async evaluation via Redis Stream
+        voiceEvaluateStreamProducer.sendEvaluateTask(sessionId);
+        log.info("Ended voice interview session: {}, duration: {} seconds, evaluation triggered",
                 sessionId, session.getActualDuration());
     }
 
@@ -324,6 +330,8 @@ public class VoiceInterviewService {
                 .updatedAt(session.getUpdatedAt())
                 .actualDuration(session.getActualDuration())
                 .messageCount(messageRepository.countBySessionId(session.getId()))
+                .evaluateStatus(session.getEvaluateStatus() != null ? session.getEvaluateStatus().name() : null)
+                .evaluateError(session.getEvaluateError())
                 .build())
             .collect(Collectors.toList());
     }

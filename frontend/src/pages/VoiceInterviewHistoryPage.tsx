@@ -1,25 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Play, FileText } from 'lucide-react';
+import { Clock, Play, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { voiceInterviewApi, SessionMeta } from '../api/voiceInterview';
 
 export default function VoiceInterviewHistoryPage() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     loadSessions();
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
   }, []);
 
-  const loadSessions = async () => {
+  // Auto-poll when any session is evaluating
+  useEffect(() => {
+    const hasEvaluating = sessions.some(
+      s => s.status === 'COMPLETED' && (s.evaluateStatus === 'PENDING' || s.evaluateStatus === 'PROCESSING')
+    );
+
+    if (hasEvaluating && !pollingRef.current) {
+      pollingRef.current = setInterval(() => loadSessions(true), 3000);
+    } else if (!hasEvaluating && pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, [sessions]);
+
+  const loadSessions = async (silent = false) => {
     try {
       const data = await voiceInterviewApi.getAllSessions();
       setSessions(data);
     } catch (error) {
       console.error('Failed to load sessions:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -30,6 +50,16 @@ export default function VoiceInterviewHistoryPage() {
     } catch (error) {
       console.error('Failed to resume session:', error);
       alert('恢复会话失败');
+    }
+  };
+
+  const handleRetryEvaluation = async (sessionId: number) => {
+    try {
+      await voiceInterviewApi.generateEvaluation(sessionId);
+      loadSessions();
+    } catch (error) {
+      console.error('Failed to retry evaluation:', error);
+      alert('重试评估失败');
     }
   };
 
@@ -59,6 +89,54 @@ export default function VoiceInterviewHistoryPage() {
       <span className={`px-2 py-0.5 rounded-full text-xs ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
         {labels[status] || status}
       </span>
+    );
+  };
+
+  const getEvaluateAction = (session: SessionMeta) => {
+    if (session.status !== 'COMPLETED') return null;
+
+    const evalStatus = session.evaluateStatus;
+
+    if (evalStatus === 'COMPLETED') {
+      return (
+        <button
+          onClick={() => navigate(`/voice-interview/${session.sessionId}/evaluation`)}
+          className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
+        >
+          查看报告
+        </button>
+      );
+    }
+
+    if (evalStatus === 'PENDING' || evalStatus === 'PROCESSING') {
+      return (
+        <span className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg flex items-center gap-2 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          评估中
+        </span>
+      );
+    }
+
+    if (evalStatus === 'FAILED') {
+      return (
+        <button
+          onClick={() => handleRetryEvaluation(session.sessionId)}
+          className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-2 text-sm"
+        >
+          <RefreshCw className="w-4 h-4" />
+          评估失败，重试
+        </button>
+      );
+    }
+
+    // No evaluateStatus yet — navigate to evaluation page which will trigger generation
+    return (
+      <button
+        onClick={() => navigate(`/voice-interview/${session.sessionId}/evaluation`)}
+        className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
+      >
+        查看报告
+      </button>
     );
   };
 
@@ -142,14 +220,7 @@ export default function VoiceInterviewHistoryPage() {
                         继续面试
                       </button>
                     )}
-                    {session.status === 'COMPLETED' && (
-                      <button
-                        onClick={() => navigate(`/voice-interview/${session.sessionId}/evaluation`)}
-                        className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
-                      >
-                        查看报告
-                      </button>
-                    )}
+                    {getEvaluateAction(session)}
                   </div>
                 </div>
               </div>

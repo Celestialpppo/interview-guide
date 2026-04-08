@@ -35,16 +35,34 @@ export interface InterviewMessage {
   sequenceNum: number;
 }
 
-export interface Evaluation {
+export interface VoiceAnswerDetail {
+  questionIndex: number;
+  question: string;
+  category: string;
+  userAnswer: string;
+  score: number;
+  feedback: string;
+  referenceAnswer?: string | null;
+  keyPoints?: string[] | null;
+}
+
+export interface VoiceEvaluationDetail {
   sessionId: number;
+  totalQuestions: number;
   overallScore: number;
-  overallRating: string;
-  techKnowledge: { score: number; comment: string };
-  projectExp: { score: number; comment: string };
-  communication: { score: number; comment: string };
-  logicalThinking: { score: number; comment: string };
-  improvementSuggestions: string[];
-  strengthsSummary: string;
+  overallFeedback: string;
+  strengths: string[];
+  improvements: string[];
+  answers: VoiceAnswerDetail[];
+}
+
+/**
+ * Evaluation status response from GET/POST evaluation endpoints
+ */
+export interface EvaluationStatusResponse {
+  evaluateStatus: string | null;  // PENDING | PROCESSING | COMPLETED | FAILED
+  evaluateError?: string | null;
+  evaluation?: VoiceEvaluationDetail | null;
 }
 
 /**
@@ -59,6 +77,8 @@ export interface SessionMeta {
   updatedAt: string;
   actualDuration?: number;
   messageCount: number;
+  evaluateStatus?: string;
+  evaluateError?: string;
 }
 
 /**
@@ -148,19 +168,19 @@ export const voiceInterviewApi = {
   },
 
   /**
-   * 获取面试评估结果
+   * 获取面试评估状态和结果（轮询）
    */
-  async getEvaluation(sessionId: number): Promise<Evaluation> {
-    return request.get<Evaluation>(
+  async getEvaluation(sessionId: number): Promise<EvaluationStatusResponse> {
+    return request.get<EvaluationStatusResponse>(
       `/api/voice-interview/sessions/${sessionId}/evaluation`
     );
   },
 
   /**
-   * 生成面试评估（异步）
+   * 触发异步评估生成
    */
-  async generateEvaluation(sessionId: number): Promise<Evaluation> {
-    return request.post<Evaluation>(
+  async generateEvaluation(sessionId: number): Promise<EvaluationStatusResponse> {
+    return request.post<EvaluationStatusResponse>(
       `/api/voice-interview/sessions/${sessionId}/evaluation`
     );
   },

@@ -23,4 +23,6 @@ public class SessionMetaDTO {
     private LocalDateTime updatedAt;
     private Integer actualDuration;
     private Long messageCount;
+    private String evaluateStatus;
+    private String evaluateError;
 }

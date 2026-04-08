@@ -342,13 +342,13 @@ public class QwenAsrService {
                 log.error("[Session: {}] Thread interrupted while ending session", sessionId, e);
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
-                log.error("[Session: {}] Error while stopping session", sessionId, e);
-            } finally {
-                try {
-                    session.getConversation().close();
-                } catch (Exception e) {
-                    log.error("[Session: {}] Error closing connection", sessionId, e);
-                }
+                log.warn("[Session: {}] Error while ending session (may already be closed): {}", sessionId, e.getMessage());
+            }
+
+            try {
+                session.getConversation().close();
+            } catch (Exception e) {
+                log.debug("[Session: {}] Connection already closed: {}", sessionId, e.getMessage());
             }
         }
     }
