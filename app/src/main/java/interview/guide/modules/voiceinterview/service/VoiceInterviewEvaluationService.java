@@ -1,7 +1,7 @@
 package interview.guide.modules.voiceinterview.service;
 
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import interview.guide.modules.voiceinterview.dto.EvaluationResponseDTO;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewEvaluationEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
@@ -245,17 +245,24 @@ public class VoiceInterviewEvaluationService {
                                                           VoiceInterviewSessionEntity session,
                                                           Map<String, Object> evaluationData) {
         try {
+            // Safe extraction with null checks to prevent NPE from incomplete LLM responses
+            Number overallScore = (Number) evaluationData.get("overall_score");
+            Number techKnowledgeScore = (Number) evaluationData.get("tech_knowledge_score");
+            Number projectExpScore = (Number) evaluationData.get("project_exp_score");
+            Number communicationScore = (Number) evaluationData.get("communication_score");
+            Number logicalThinkingScore = (Number) evaluationData.get("logical_thinking_score");
+
             VoiceInterviewEvaluationEntity evaluation = VoiceInterviewEvaluationEntity.builder()
                     .sessionId(sessionId)
-                    .overallScore(((Number) evaluationData.get("overall_score")).intValue())
+                    .overallScore(overallScore != null ? overallScore.intValue() : 0)
                     .overallRating((String) evaluationData.get("overall_rating"))
-                    .techKnowledgeScore(((Number) evaluationData.get("tech_knowledge_score")).intValue())
+                    .techKnowledgeScore(techKnowledgeScore != null ? techKnowledgeScore.intValue() : 0)
                     .techKnowledgeComment((String) evaluationData.get("tech_knowledge_comment"))
-                    .projectExpScore(((Number) evaluationData.get("project_exp_score")).intValue())
+                    .projectExpScore(projectExpScore != null ? projectExpScore.intValue() : 0)
                     .projectExpComment((String) evaluationData.get("project_exp_comment"))
-                    .communicationScore(((Number) evaluationData.get("communication_score")).intValue())
+                    .communicationScore(communicationScore != null ? communicationScore.intValue() : 0)
                     .communicationComment((String) evaluationData.get("communication_comment"))
-                    .logicalThinkingScore(((Number) evaluationData.get("logical_thinking_score")).intValue())
+                    .logicalThinkingScore(logicalThinkingScore != null ? logicalThinkingScore.intValue() : 0)
                     .logicalThinkingComment((String) evaluationData.get("logical_thinking_comment"))
                     .improvementSuggestions(objectMapper.writeValueAsString(evaluationData.get("improvement_suggestions")))
                     .strengthsSummary((String) evaluationData.get("strengths_summary"))

@@ -1,7 +1,7 @@
 package interview.guide.modules.voiceinterview.handler;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import interview.guide.modules.voiceinterview.dto.WebSocketControlMessage;
 import interview.guide.modules.voiceinterview.dto.WebSocketSubtitleMessage;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
@@ -9,7 +9,7 @@ import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.service.QwenAsrService;
 import interview.guide.modules.voiceinterview.service.QwenTtsService;
-import interview.guide.modules.voiceinterview.service.LlmService;
+import interview.guide.modules.voiceinterview.service.DashscopeLlmService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +49,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     private final ObjectMapper objectMapper;
     private final QwenAsrService sttService;
     private final QwenTtsService ttsService;
-    private final LlmService llmService;
+    private final DashscopeLlmService llmService;
     private final VoiceInterviewService interviewService;
     private final VoiceInterviewProperties voiceInterviewProperties;
 
@@ -652,7 +652,8 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                 session.close(CloseStatus.GOING_AWAY);
             }
 
-            // 4. Cleanup
+            // 4. Cleanup - Stop ASR session to prevent resource leak
+            sttService.stopTranscription(sessionId);
             sessions.remove(sessionId);
             sessionStates.remove(sessionId);
             lastActivityTime.remove(sessionId);

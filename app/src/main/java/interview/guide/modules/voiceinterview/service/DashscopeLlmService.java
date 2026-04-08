@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 
 @Service
 @Slf4j
-public class DashscopeLlmService implements LlmService {
+public class DashscopeLlmService {
 
     private final interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
     private final VoiceInterviewPromptService promptService;
@@ -25,7 +25,6 @@ public class DashscopeLlmService implements LlmService {
         this.resumeRepository = resumeRepository;
     }
 
-    @Override
     public String chat(String userInput, VoiceInterviewSessionEntity session, List<String> conversationHistory) {
         try {
             // Fetch resume text if resumeId is provided
@@ -99,7 +98,6 @@ public class DashscopeLlmService implements LlmService {
         }
     }
 
-    @Override
     public String chatStream(String userInput, Consumer<String> onToken, VoiceInterviewSessionEntity session, List<String> conversationHistory) {
         // MVP: Use synchronous version
         // TODO: Implement streaming in Phase 2 optimization

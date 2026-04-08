@@ -328,6 +328,8 @@ public class QwenAsrService {
     public void stopTranscription(String sessionId) {
         synchronized (lockForSession(sessionId)) {
             AsrSession session = sessions.remove(sessionId);
+            // Clean up the session lock to prevent memory leak
+            sessionLocks.remove(sessionId);
             if (session == null) {
                 log.warn("[Session: {}] Attempted to stop non-existent session", sessionId);
                 return;

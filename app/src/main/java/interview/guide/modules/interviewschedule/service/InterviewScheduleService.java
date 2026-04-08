@@ -3,6 +3,7 @@ package interview.guide.modules.interviewschedule.service;
 import interview.guide.modules.interviewschedule.model.*;
 import interview.guide.modules.interviewschedule.repository.InterviewScheduleRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -90,18 +91,7 @@ public class InterviewScheduleService {
 
     private InterviewScheduleDTO toDTO(InterviewScheduleEntity entity) {
         InterviewScheduleDTO dto = new InterviewScheduleDTO();
-        dto.setId(entity.getId());
-        dto.setCompanyName(entity.getCompanyName());
-        dto.setPosition(entity.getPosition());
-        dto.setInterviewTime(entity.getInterviewTime());
-        dto.setInterviewType(entity.getInterviewType());
-        dto.setMeetingLink(entity.getMeetingLink());
-        dto.setRoundNumber(entity.getRoundNumber());
-        dto.setInterviewer(entity.getInterviewer());
-        dto.setNotes(entity.getNotes());
-        dto.setStatus(entity.getStatus());
-        dto.setCreatedAt(entity.getCreatedAt());
-        dto.setUpdatedAt(entity.getUpdatedAt());
+        BeanUtils.copyProperties(entity, dto);
         return dto;
     }
 }

@@ -15,6 +15,7 @@ const KnowledgeBaseUploadPage = lazy(() => import('./pages/KnowledgeBaseUploadPa
 const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePage'));
 const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewHistoryPage = lazy(() => import('./pages/VoiceInterviewHistoryPage'));
+const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewSchedulePage = lazy(() => import('./pages/InterviewSchedulePage'));
 
 // Loading component
@@ -180,6 +181,9 @@ function App() {
 
           {/* 语音面试 (Fullscreen, outside of Layout) */}
           <Route path="voice-interview" element={<VoiceInterviewPageWrapper />} />
+
+          {/* 语音面试评估报告 (Fullscreen, outside of Layout) */}
+          <Route path="voice-interview/:sessionId/evaluation" element={<VoiceInterviewEvaluationPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>
