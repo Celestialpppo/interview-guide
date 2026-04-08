@@ -6,6 +6,7 @@ import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.infrastructure.redis.RedisService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -20,7 +21,7 @@ public class VoiceEvaluateStreamProducer extends AbstractStreamProducer<String> 
     private final VoiceInterviewService voiceInterviewService;
 
     public VoiceEvaluateStreamProducer(RedisService redisService,
-                                       VoiceInterviewService voiceInterviewService) {
+                                       @Lazy VoiceInterviewService voiceInterviewService) {
         super(redisService);
         this.voiceInterviewService = voiceInterviewService;
     }
