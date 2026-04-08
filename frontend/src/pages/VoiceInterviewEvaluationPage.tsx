@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { EvaluationStatusResponse, VoiceEvaluationDetail, voiceInterviewApi } from '../api/voiceInterview';
@@ -135,7 +135,7 @@ export default function VoiceInterviewEvaluationPage() {
               重试
             </button>
             <button
-              onClick={() => navigate('/voice-interview/history')}
+              onClick={() => navigate('/interviews')}
               className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
             >
               返回列表
@@ -150,8 +150,7 @@ export default function VoiceInterviewEvaluationPage() {
     return null;
   }
 
-  // Map VoiceEvaluationDetail to InterviewDetail for reuse of InterviewDetailPanel
-  const interviewDetail: InterviewDetail = {
+  const interviewDetail = useMemo<InterviewDetail>(() => ({
     id: 0,
     sessionId: sessionId!,
     totalQuestions: evaluation.totalQuestions,
@@ -173,7 +172,7 @@ export default function VoiceInterviewEvaluationPage() {
       keyPoints: a.keyPoints ?? undefined,
       answeredAt: new Date().toISOString(),
     })),
-  };
+  }), [evaluation, sessionId]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -181,7 +180,7 @@ export default function VoiceInterviewEvaluationPage() {
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
           <button
-            onClick={() => navigate('/voice-interview/history')}
+            onClick={() => navigate('/interviews')}
             className="p-2 hover:bg-slate-100 rounded-full transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-slate-600" />

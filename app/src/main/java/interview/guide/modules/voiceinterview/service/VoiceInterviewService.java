@@ -484,6 +484,32 @@ public class VoiceInterviewService {
     }
 
     /**
+     * Update evaluation status on session entity (shared by Producer/Consumer/Controller)
+     */
+    public void updateEvaluateStatus(Long sessionId, AsyncTaskStatus status, String error) {
+        try {
+            sessionRepository.findById(sessionId).ifPresent(session -> {
+                session.setEvaluateStatus(status);
+                session.setEvaluateError(error);
+                sessionRepository.save(session);
+                log.debug("Evaluation status updated: sessionId={}, status={}", sessionId, status);
+            });
+        } catch (Exception e) {
+            log.error("Failed to update evaluation status: sessionId={}, status={}, error={}",
+                    sessionId, status, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Trigger async evaluation for a session (called by Controller)
+     */
+    @Transactional
+    public void triggerEvaluation(Long sessionId) {
+        updateEvaluateStatus(sessionId, AsyncTaskStatus.PENDING, null);
+        voiceEvaluateStreamProducer.sendEvaluateTask(sessionId.toString());
+    }
+
+    /**
      * Cache session in Redis
      */
     private void cacheSession(VoiceInterviewSessionEntity session) {

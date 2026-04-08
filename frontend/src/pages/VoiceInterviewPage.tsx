@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
 import RealtimeSubtitle from '../components/RealtimeSubtitle';
 import PhaseSetupModal, { PhaseConfig } from '../components/PhaseSetupModal';
+import { getRoleLabel } from '../utils/voiceInterview';
 import {
   voiceInterviewApi,
   CreateSessionRequest,
@@ -115,14 +116,7 @@ export default function VoiceInterviewPage() {
     return phaseMap[phase] || phase;
   };
 
-  const getRoleLabel = (role: string) => {
-    const roleMap: Record<string, string> = {
-      'ali-p8': '阿里P8后端面试',
-      'byteance-algo': '字节算法工程师面试',
-      'tencent-backend': '腾讯后台开发面试',
-    };
-    return roleMap[role] || role;
-  };
+  // getRoleLabel uses shared getRoleLabel from utils/voiceInterview.ts
 
   const handleRoleTypeChange = (newRoleType: string) => {
     // Update current role type
@@ -318,7 +312,7 @@ export default function VoiceInterviewPage() {
 
     try {
       await voiceInterviewApi.pauseSession(sessionId);
-      navigate('/voice-interview/history');
+      navigate('/interviews');
     } catch (error) {
       console.error('Failed to pause session:', error);
       alert('暂停失败，请重试');

@@ -194,9 +194,8 @@ public class VoiceInterviewController {
                     .build());
         }
 
-        // Trigger new async evaluation
-        session.setEvaluateStatus(AsyncTaskStatus.PENDING);
-        voiceEvaluateStreamProducer.sendEvaluateTask(sessionId.toString());
+        // Trigger new async evaluation via service
+        voiceInterviewService.triggerEvaluation(sessionId);
 
         return Result.success(VoiceEvaluationStatusDTO.builder()
                 .evaluateStatus(AsyncTaskStatus.PENDING.name())

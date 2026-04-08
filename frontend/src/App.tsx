@@ -14,7 +14,6 @@ const KnowledgeBaseQueryPage = lazy(() => import('./pages/KnowledgeBaseQueryPage
 const KnowledgeBaseUploadPage = lazy(() => import('./pages/KnowledgeBaseUploadPage'));
 const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePage'));
 const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
-const VoiceInterviewHistoryPage = lazy(() => import('./pages/VoiceInterviewHistoryPage'));
 const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewSchedulePage = lazy(() => import('./pages/InterviewSchedulePage'));
 
@@ -168,9 +167,6 @@ function App() {
 
             {/* 知识库上传 */}
             <Route path="knowledgebase/upload" element={<KnowledgeBaseUploadPageWrapper />} />
-
-            {/* 语音面试历史 */}
-            <Route path="voice-interview/history" element={<VoiceInterviewHistoryPage />} />
 
             {/* 面试日程管理 */}
             <Route path="interview-schedule" element={<InterviewSchedulePage />} />
