@@ -341,8 +341,7 @@ export default function VoiceInterviewPage() {
   };
 
   const handleCloseModal = () => {
-    // Just close the modal, don't navigate
-    setShowPhaseModal(false);
+    navigate('/upload');
   };
 
   // Validation
