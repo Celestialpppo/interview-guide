@@ -17,7 +17,7 @@ export default function VoiceInterviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const initialRoleType = queryParams.get('role') as CreateSessionRequest['roleType'];
+  const initialRoleType = (queryParams.get('role') || 'ali-p8') as CreateSessionRequest['roleType'];
 
   // UI state
   const [showPhaseModal, setShowPhaseModal] = useState(true);
