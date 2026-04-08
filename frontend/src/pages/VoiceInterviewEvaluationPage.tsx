@@ -104,32 +104,29 @@ export default function VoiceInterviewEvaluationPage() {
     }
   };
 
-  const interviewDetail = useMemo<InterviewDetail>(() => {
-    if (!evaluation) return null as unknown as InterviewDetail;
-    return {
-      id: 0,
-      sessionId: sessionId!,
-      totalQuestions: evaluation.totalQuestions,
-      status: 'COMPLETED',
-      overallScore: evaluation.overallScore,
-      overallFeedback: evaluation.overallFeedback,
-      createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      strengths: evaluation.strengths,
-      improvements: evaluation.improvements,
-      answers: evaluation.answers.map(a => ({
-        questionIndex: a.questionIndex,
-        question: a.question,
-        category: a.category,
-        userAnswer: a.userAnswer,
-        score: a.score,
-        feedback: a.feedback,
-        referenceAnswer: a.referenceAnswer ?? undefined,
-        keyPoints: a.keyPoints ?? undefined,
-        answeredAt: new Date().toISOString(),
-      })),
-    };
-  }, [evaluation, sessionId]);
+  const interviewDetail = useMemo<InterviewDetail>(() => ({
+    id: 0,
+    sessionId: sessionId!,
+    totalQuestions: evaluation!.totalQuestions,
+    status: 'COMPLETED',
+    overallScore: evaluation!.overallScore,
+    overallFeedback: evaluation!.overallFeedback,
+    createdAt: '',
+    completedAt: '',
+    strengths: evaluation!.strengths,
+    improvements: evaluation!.improvements,
+    answers: evaluation!.answers.map(a => ({
+      questionIndex: a.questionIndex,
+      question: a.question,
+      category: a.category,
+      userAnswer: a.userAnswer,
+      score: a.score,
+      feedback: a.feedback,
+      referenceAnswer: a.referenceAnswer ?? undefined,
+      keyPoints: a.keyPoints ?? undefined,
+      answeredAt: '',
+    })),
+  }), [evaluation, sessionId]);
 
   // Loading state
   if (loading) {
@@ -195,7 +192,7 @@ export default function VoiceInterviewEvaluationPage() {
         </div>
       </div>
 
-      {/* Reuse InterviewDetailPanel */}
+      {/* InterviewDetailPanel */}
       <div className="max-w-6xl mx-auto px-6 py-8">
         <InterviewDetailPanel interview={interviewDetail} />
       </div>

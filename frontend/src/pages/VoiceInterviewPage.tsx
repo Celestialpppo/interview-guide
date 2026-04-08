@@ -116,10 +116,7 @@ export default function VoiceInterviewPage() {
     return phaseMap[phase] || phase;
   };
 
-  // getRoleLabel uses shared getRoleLabel from utils/voiceInterview.ts
-
   const handleRoleTypeChange = (newRoleType: string) => {
-    // Update current role type
     setCurrentRoleType(newRoleType);
     // Update URL to reflect the selected role type
     const newUrl = `/voice-interview?role=${newRoleType}`;

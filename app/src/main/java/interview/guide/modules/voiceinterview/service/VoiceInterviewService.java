@@ -50,6 +50,7 @@ public class VoiceInterviewService {
 
     private static final String SESSION_CACHE_KEY_PREFIX = "voice:interview:session:";
     private static final int CACHE_TTL_HOURS = 1;
+    private static final String DEFAULT_USER_ID = "default";
 
     /**
      * Create a new voice interview session
@@ -61,7 +62,7 @@ public class VoiceInterviewService {
     @Transactional
     public SessionResponseDTO createSession(CreateSessionRequest request) {
         VoiceInterviewSessionEntity session = VoiceInterviewSessionEntity.builder()
-                .userId("default")
+                .userId(DEFAULT_USER_ID)
                 .roleType(request.getRoleType())
                 .customJdText(request.getCustomJdText())
                 .resumeId(request.getResumeId())
@@ -305,12 +306,12 @@ public class VoiceInterviewService {
      * Get all sessions for a user
      * 获取用户所有会话
      *
-     * @param userId User ID (optional, defaults to "default")
+     * @param userId User ID (optional, defaults to DEFAULT_USER_ID)
      * @param status Filter by status (optional)
      * @return List of session metadata
      */
     public List<SessionMetaDTO> getAllSessions(String userId, String status) {
-        userId = userId != null ? userId : "default";
+        userId = userId != null ? userId : DEFAULT_USER_ID;
 
         List<VoiceInterviewSessionEntity> sessions;
         if (status != null && !status.isEmpty()) {

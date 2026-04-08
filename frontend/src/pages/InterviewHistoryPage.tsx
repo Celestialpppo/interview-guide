@@ -24,8 +24,6 @@ import {
   Users,
 } from 'lucide-react';
 
-// ========== Types ==========
-
 type InterviewType = 'all' | 'text' | 'voice';
 
 interface UnifiedInterviewItem {
@@ -50,8 +48,6 @@ interface InterviewStats {
   averageScore: number;
 }
 
-// ========== Helper Functions ==========
-
 function isCompletedStatus(status: string): boolean {
   return status === 'COMPLETED' || status === 'EVALUATED';
 }
@@ -69,8 +65,6 @@ function isEvaluating(item: UnifiedInterviewItem): boolean {
 function isEvaluateFailed(item: UnifiedInterviewItem): boolean {
   return item.evaluateStatus === 'FAILED';
 }
-
-// getScoreColor uses shared getScoreProgressColor from utils/score.ts
 
 function StatusIcon({ item }: { item: UnifiedInterviewItem }) {
   if (isEvaluateFailed(item)) return <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400"/>;
@@ -90,16 +84,12 @@ function getStatusText(item: UnifiedInterviewItem): string {
   return '已创建';
 }
 
-// getRoleLabel uses shared getRoleLabel from utils/voiceInterview.ts
-
 function formatDuration(seconds?: number): string {
   if (!seconds) return '-';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}分${secs}秒`;
 }
-
-// ========== Sub Components ==========
 
 function StatCard({
   icon: Icon,
@@ -151,8 +141,6 @@ function TypeBadge({ type }: { type: 'text' | 'voice' }) {
     </span>
   );
 }
-
-// ========== Main Component ==========
 
 interface InterviewHistoryPageProps {
   onBack: () => void;
@@ -260,9 +248,9 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview 
   useEffect(() => {
     const hasEvaluating = items.some(i => isEvaluating(i));
 
-    if (hasEvaluating) {
+    if (hasEvaluating && !pollingRef.current) {
       pollingRef.current = window.setInterval(() => loadAll(true), 3000);
-    } else if (pollingRef.current) {
+    } else if (!hasEvaluating && pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
