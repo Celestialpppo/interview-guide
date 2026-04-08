@@ -1,5 +1,5 @@
 # 本地开发依赖服务
-# 用法：cp .env.example .env && docker compose -f docker-compose.dev.yml up -d
+# 用法：docker compose -f docker-compose.dev.yml up -d
 # 停止：docker compose -f docker-compose.dev.yml down
 # 清除数据：docker compose -f docker-compose.dev.yml down -v
 
