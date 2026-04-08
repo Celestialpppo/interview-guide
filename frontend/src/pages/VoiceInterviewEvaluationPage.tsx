@@ -104,6 +104,33 @@ export default function VoiceInterviewEvaluationPage() {
     }
   };
 
+  const interviewDetail = useMemo<InterviewDetail>(() => {
+    if (!evaluation) return null as unknown as InterviewDetail;
+    return {
+      id: 0,
+      sessionId: sessionId!,
+      totalQuestions: evaluation.totalQuestions,
+      status: 'COMPLETED',
+      overallScore: evaluation.overallScore,
+      overallFeedback: evaluation.overallFeedback,
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      strengths: evaluation.strengths,
+      improvements: evaluation.improvements,
+      answers: evaluation.answers.map(a => ({
+        questionIndex: a.questionIndex,
+        question: a.question,
+        category: a.category,
+        userAnswer: a.userAnswer,
+        score: a.score,
+        feedback: a.feedback,
+        referenceAnswer: a.referenceAnswer ?? undefined,
+        keyPoints: a.keyPoints ?? undefined,
+        answeredAt: new Date().toISOString(),
+      })),
+    };
+  }, [evaluation, sessionId]);
+
   // Loading state
   if (loading) {
     return (
@@ -149,30 +176,6 @@ export default function VoiceInterviewEvaluationPage() {
   if (!evaluation) {
     return null;
   }
-
-  const interviewDetail = useMemo<InterviewDetail>(() => ({
-    id: 0,
-    sessionId: sessionId!,
-    totalQuestions: evaluation.totalQuestions,
-    status: 'COMPLETED',
-    overallScore: evaluation.overallScore,
-    overallFeedback: evaluation.overallFeedback,
-    createdAt: new Date().toISOString(),
-    completedAt: new Date().toISOString(),
-    strengths: evaluation.strengths,
-    improvements: evaluation.improvements,
-    answers: evaluation.answers.map(a => ({
-      questionIndex: a.questionIndex,
-      question: a.question,
-      category: a.category,
-      userAnswer: a.userAnswer,
-      score: a.score,
-      feedback: a.feedback,
-      referenceAnswer: a.referenceAnswer ?? undefined,
-      keyPoints: a.keyPoints ?? undefined,
-      answeredAt: new Date().toISOString(),
-    })),
-  }), [evaluation, sessionId]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
