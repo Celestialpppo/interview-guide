@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {Calendar, ChevronRight, Database, FileStack, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
+import {Calendar, ChevronRight, Database, FileStack, FileText, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 
 interface NavItem {
@@ -26,18 +26,25 @@ export default function Layout() {
   const navGroups: NavGroup[] = [
     {
       id: 'career',
-      title: '简历与面试',
+      title: '简历管理',
       items: [
         { id: 'upload', path: '/upload', label: '上传简历', icon: Upload, description: 'AI 分析简历' },
         { id: 'resumes', path: '/history', label: '简历库', icon: FileStack, description: '管理所有简历' },
-        { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '查看面试历史' },
       ],
     },
     {
-      id: 'voice',
-      title: '语音面试',
+      id: 'interview',
+      title: '模拟面试',
       items: [
-        { id: 'voice-interview', path: '/voice-interview', label: '开始面试', icon: Mic, description: '实时语音对话' },
+        { id: 'text-interview', path: '/upload', label: '文字面试', icon: FileText, description: '基于简历逐题答题' },
+        { id: 'voice-interview', path: '/voice-interview', label: '语音面试', icon: Mic, description: '实时语音对话' },
+      ],
+    },
+    {
+      id: 'records',
+      title: '面试记录',
+      items: [
+        { id: 'interviews', path: '/interviews', label: '历史列表', icon: Users, description: '查看面试历史' },
       ],
     },
     {
