@@ -104,29 +104,32 @@ export default function VoiceInterviewEvaluationPage() {
     }
   };
 
-  const interviewDetail = useMemo<InterviewDetail>(() => ({
-    id: 0,
-    sessionId: sessionId!,
-    totalQuestions: evaluation!.totalQuestions,
-    status: 'COMPLETED',
-    overallScore: evaluation!.overallScore,
-    overallFeedback: evaluation!.overallFeedback,
-    createdAt: '',
-    completedAt: '',
-    strengths: evaluation!.strengths,
-    improvements: evaluation!.improvements,
-    answers: evaluation!.answers.map(a => ({
-      questionIndex: a.questionIndex,
-      question: a.question,
-      category: a.category,
-      userAnswer: a.userAnswer,
-      score: a.score,
-      feedback: a.feedback,
-      referenceAnswer: a.referenceAnswer ?? undefined,
-      keyPoints: a.keyPoints ?? undefined,
-      answeredAt: '',
-    })),
-  }), [evaluation, sessionId]);
+  const interviewDetail = useMemo<InterviewDetail | null>(() => {
+    if (!evaluation) return null;
+    return {
+      id: 0,
+      sessionId: sessionId!,
+      totalQuestions: evaluation.totalQuestions,
+      status: 'COMPLETED',
+      overallScore: evaluation.overallScore,
+      overallFeedback: evaluation.overallFeedback,
+      createdAt: '',
+      completedAt: '',
+      strengths: evaluation.strengths,
+      improvements: evaluation.improvements,
+      answers: evaluation.answers.map(a => ({
+        questionIndex: a.questionIndex,
+        question: a.question,
+        category: a.category,
+        userAnswer: a.userAnswer,
+        score: a.score,
+        feedback: a.feedback,
+        referenceAnswer: a.referenceAnswer ?? undefined,
+        keyPoints: a.keyPoints ?? undefined,
+        answeredAt: '',
+      })),
+    };
+  }, [evaluation, sessionId]);
 
   // Loading state
   if (loading) {
@@ -170,7 +173,7 @@ export default function VoiceInterviewEvaluationPage() {
     );
   }
 
-  if (!evaluation) {
+  if (!evaluation || !interviewDetail) {
     return null;
   }
 
