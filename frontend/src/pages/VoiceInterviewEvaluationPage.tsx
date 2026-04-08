@@ -134,10 +134,10 @@ export default function VoiceInterviewEvaluationPage() {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-slate-200 border-t-primary-500 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600 text-lg">
+          <div className="w-16 h-16 border-4 border-slate-200 dark:border-slate-700 border-t-primary-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-600 dark:text-slate-300 text-lg">
             {evaluateStatus === 'PROCESSING' ? 'AI 正在分析面试表现...' : '正在生成评估报告...'}
           </p>
           <p className="text-slate-400 text-sm mt-2">预计需要 10-30 秒</p>
@@ -149,9 +149,9 @@ export default function VoiceInterviewEvaluationPage() {
   // Error state
   if (error && !evaluation) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
         <div className="text-center">
-          <p className="text-slate-600 text-lg mb-2">评估报告生成失败</p>
+          <p className="text-slate-600 dark:text-slate-300 text-lg mb-2">评估报告生成失败</p>
           <p className="text-slate-400 text-sm mb-6">{error}</p>
           <div className="flex items-center gap-3 justify-center">
             <button
@@ -163,7 +163,7 @@ export default function VoiceInterviewEvaluationPage() {
             </button>
             <button
               onClick={() => navigate('/interviews')}
-              className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+              className="px-6 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
             >
               返回列表
             </button>
@@ -178,19 +178,19 @@ export default function VoiceInterviewEvaluationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
           <button
             onClick={() => navigate('/interviews')}
-            className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
           >
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
+            <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">面试评估报告</h1>
-            <p className="text-sm text-slate-500">会话 ID: {sessionId}</p>
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white">面试评估报告</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">会话 ID: {sessionId}</p>
           </div>
         </div>
       </div>
