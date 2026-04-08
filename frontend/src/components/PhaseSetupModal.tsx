@@ -69,19 +69,19 @@ const PHASES = [
     key: 'techEnabled' as const,
     label: '技术问题',
     description: '深入考察技术能力和编程基础',
-    estimatedMinutes: 15,
+    baseWeight: 15,
   },
   {
     key: 'projectEnabled' as const,
     label: '项目深挖',
     description: '探讨项目细节、难点和解决方案',
-    estimatedMinutes: 15,
+    baseWeight: 15,
   },
   {
     key: 'hrEnabled' as const,
     label: 'HR 问题',
     description: '职业规划、薪资期望、团队协作',
-    estimatedMinutes: 5,
+    baseWeight: 5,
   },
 ];
 
@@ -127,16 +127,27 @@ export default function PhaseSetupModal({
   const togglePhase = (phase: keyof PhaseConfig) => {
     setConfig((prev) => {
       const newConfig = { ...prev, [phase]: !prev[phase] };
-      const estimatedMinutes = PHASES.reduce(
-        (total, p) => total + (newConfig[p.key] ? p.estimatedMinutes : 0), 0
+      const baseMinutes = PHASES.reduce(
+        (total, p) => total + (newConfig[p.key] ? p.baseWeight : 0), 0
       );
-      newConfig.plannedDuration = Math.max(15, Math.min(60, Math.round(estimatedMinutes / 5) * 5));
+      newConfig.plannedDuration = Math.max(15, Math.min(60, Math.round(baseMinutes / 5) * 5));
       return newConfig;
     });
   };
 
   const handleDurationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setConfig((prev) => ({ ...prev, plannedDuration: parseInt(e.target.value) }));
+  };
+
+  /** 根据启用阶段的权重比例，计算某阶段的分配分钟数 */
+  const getPhaseMinutes = (phaseKey: keyof PhaseConfig): number => {
+    const enabledTotalWeight = PHASES.reduce(
+      (sum, p) => sum + (config[p.key] ? p.baseWeight : 0), 0
+    );
+    if (enabledTotalWeight === 0) return 0;
+    const phase = PHASES.find(p => p.key === phaseKey);
+    if (!phase || !config[phaseKey]) return 0;
+    return Math.round(config.plannedDuration * phase.baseWeight / enabledTotalWeight);
   };
 
   const handleJDChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -169,9 +180,7 @@ export default function PhaseSetupModal({
     }
   };
 
-  const estimatedTotalMinutes = PHASES.reduce(
-    (total, phase) => total + (config[phase.key] ? phase.estimatedMinutes : 0), 0
-  );
+  const enabledPhasesCount = PHASES.filter(p => config[p.key]).length;
 
   return (
     <AnimatePresence>
@@ -388,7 +397,7 @@ export default function PhaseSetupModal({
                                   : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
                                 }
                               `}>
-                                ~{phase.estimatedMinutes}min
+                                ~{getPhaseMinutes(phase.key)}min
                               </span>
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -409,7 +418,7 @@ export default function PhaseSetupModal({
                         计划面试时长
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        已选阶段预计约 {estimatedTotalMinutes} 分钟
+                        已选 {enabledPhasesCount} 个阶段
                       </p>
                     </div>
                     <div className="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
