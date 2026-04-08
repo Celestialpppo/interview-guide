@@ -2,7 +2,6 @@ package interview.guide.modules.voiceinterview.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.stereotype.Component;
 
 /**
@@ -10,7 +9,6 @@ import org.springframework.stereotype.Component;
  */
 @Data
 @Component
-@EnableScheduling
 @ConfigurationProperties(prefix = "app.voice-interview")
 public class VoiceInterviewProperties {
 

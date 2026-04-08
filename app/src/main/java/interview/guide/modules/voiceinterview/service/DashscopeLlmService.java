@@ -1,5 +1,6 @@
 package interview.guide.modules.voiceinterview.service;
 
+import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.modules.resume.model.ResumeEntity;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
@@ -15,11 +16,11 @@ import java.util.function.Consumer;
 @Slf4j
 public class DashscopeLlmService {
 
-    private final interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
+    private final LlmProviderRegistry llmProviderRegistry;
     private final VoiceInterviewPromptService promptService;
     private final ResumeRepository resumeRepository;
 
-    public DashscopeLlmService(interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry, VoiceInterviewPromptService promptService, ResumeRepository resumeRepository) {
+    public DashscopeLlmService(LlmProviderRegistry llmProviderRegistry, VoiceInterviewPromptService promptService, ResumeRepository resumeRepository) {
         this.llmProviderRegistry = llmProviderRegistry;
         this.promptService = promptService;
         this.resumeRepository = resumeRepository;
@@ -58,12 +59,10 @@ public class DashscopeLlmService {
             String provider = session.getLlmProvider();
             log.info("[VoiceInterview] Session {} using LLM provider: {}", session.getId(), provider);
             
-            org.springframework.ai.chat.client.ChatClient chatClient = (provider != null && !provider.isBlank())
-                ? llmProviderRegistry.getChatClient(provider)
-                : llmProviderRegistry.getDefaultChatClient();
+            ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
             // Build prompt with ChatClient
-            org.springframework.ai.chat.client.ChatClient.CallResponseSpec response = chatClient.prompt()
+            ChatClient.CallResponseSpec response = chatClient.prompt()
                 .system(systemPrompt)
                 .user(promptBuilder.toString())
                 .call();

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, Award, TrendingUp, MessageCircle, Target, CheckCircle } from 'lucide-react';
-import { Evaluation } from '../api/voiceInterview';
+import { Evaluation, voiceInterviewApi } from '../api/voiceInterview';
 
 export default function VoiceInterviewEvaluationPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -18,41 +18,8 @@ export default function VoiceInterviewEvaluationPage() {
 
     setLoading(true);
     try {
-      // TODO: 替换为真实 API 调用
-      // const data = await voiceInterviewApi.getEvaluation(parseInt(sessionId));
-      // setEvaluation(data);
-
-      // Mock 数据
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const mockEvaluation: Evaluation = {
-        sessionId: parseInt(sessionId),
-        overallScore: 85,
-        overallRating: '优秀',
-        techKnowledge: {
-          score: 88,
-          comment: '技术基础扎实，对分布式系统、微服务架构有深入理解。能够清晰解释技术选型的原因，对 Spring Boot、Redis、MySQL 等技术栈掌握良好。',
-        },
-        projectExp: {
-          score: 82,
-          comment: '项目经验丰富，能够详细描述项目中的技术挑战和解决方案。建议在回答时更多体现个人贡献和具体量化成果。',
-        },
-        communication: {
-          score: 85,
-          comment: '表达清晰有条理，能够用通俗易懂的语言解释复杂技术问题。语速适中，逻辑性强。',
-        },
-        logicalThinking: {
-          score: 87,
-          comment: '思维逻辑清晰，能够从多个角度分析问题。在系统设计问题上展现了良好的抽象能力和架构思维。',
-        },
-        improvementSuggestions: [
-          '在回答项目问题时，建议使用 STAR 原则（情境、任务、行动、结果）来组织答案',
-          '可以更具体地量化项目成果，例如性能提升的百分比、用户增长数据等',
-          '在技术深度问题上，可以进一步展开底层原理和源码层面的理解',
-          '建议在自我介绍时更加突出个人亮点和核心竞争力',
-        ],
-        strengthsSummary: '全栈开发能力强，具备优秀的系统设计思维。技术广度和深度兼备，沟通表达能力强。具有丰富的高并发项目经验，对分布式系统有深入理解。',
-      };
-      setEvaluation(mockEvaluation);
+      const data = await voiceInterviewApi.getEvaluation(parseInt(sessionId));
+      setEvaluation(data);
     } catch (error) {
       console.error('Failed to load evaluation:', error);
     } finally {

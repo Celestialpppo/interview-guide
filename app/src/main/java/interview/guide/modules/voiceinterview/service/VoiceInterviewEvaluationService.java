@@ -2,6 +2,8 @@ package interview.guide.modules.voiceinterview.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import interview.guide.common.exception.BusinessException;
+import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.voiceinterview.dto.EvaluationResponseDTO;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewEvaluationEntity;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
@@ -69,7 +71,7 @@ public class VoiceInterviewEvaluationService {
                     .findBySessionIdOrderBySequenceNumAsc(sessionId);
 
             if (messages.isEmpty()) {
-                throw new RuntimeException("No messages found for session: " + sessionId);
+                throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED, "面试会话无对话记录: " + sessionId);
             }
 
             // Build conversation history
@@ -97,9 +99,11 @@ public class VoiceInterviewEvaluationService {
 
             return buildEvaluationDTO(evaluation);
 
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error generating evaluation for session {}", sessionId, e);
-            throw new RuntimeException("Failed to generate evaluation: " + e.getMessage(), e);
+            throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED, "生成评估失败: " + e.getMessage());
         }
     }
 
@@ -114,7 +118,7 @@ public class VoiceInterviewEvaluationService {
         log.info("Getting evaluation for session: {}", sessionId);
 
         VoiceInterviewEvaluationEntity evaluation = evaluationRepository.findBySessionId(sessionId)
-                .orElseThrow(() -> new RuntimeException("Evaluation not found for session: " + sessionId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_EVALUATION_NOT_FOUND, "评估结果不存在: " + sessionId));
 
         return buildEvaluationDTO(evaluation);
     }
@@ -210,7 +214,7 @@ public class VoiceInterviewEvaluationService {
                 return objectMapper.readValue(jsonStr, new TypeReference<Map<String, Object>>() {});
             }
 
-            throw new RuntimeException("No valid JSON found in response");
+            throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED, "评估响应解析失败");
 
         } catch (Exception e) {
             log.error("Failed to parse evaluation response", e);
@@ -273,7 +277,7 @@ public class VoiceInterviewEvaluationService {
             return evaluationRepository.save(evaluation);
         } catch (Exception e) {
             log.error("Error saving evaluation", e);
-            throw new RuntimeException("Failed to save evaluation: " + e.getMessage(), e);
+            throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED, "保存评估失败: " + e.getMessage());
         }
     }
 
@@ -317,7 +321,7 @@ public class VoiceInterviewEvaluationService {
 
         } catch (Exception e) {
             log.error("Error building evaluation DTO", e);
-            throw new RuntimeException("Failed to build evaluation DTO: " + e.getMessage(), e);
+            throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED, "构建评估结果失败: " + e.getMessage());
         }
     }
 
@@ -330,6 +334,6 @@ public class VoiceInterviewEvaluationService {
      */
     private VoiceInterviewSessionEntity getSession(Long sessionId) {
         return sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new RuntimeException("Session not found: " + sessionId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND, "语音面试会话不存在: " + sessionId));
     }
 }

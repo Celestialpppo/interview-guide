@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.ResourceAccessException;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
@@ -132,20 +131,20 @@ public class GlobalExceptionHandler {
      * 处理 404 - 资源未找到异常
      */
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
+    @ResponseStatus(HttpStatus.OK)
     public Result<Void> handleNoResourceFoundException(org.springframework.web.servlet.resource.NoResourceFoundException e) {
         log.warn("资源未找到: {}", e.getResourcePath());
-        return Result.error(ErrorCode.NOT_FOUND, "API 接口不存在: " + e.getResourcePath());
+        return Result.error(ErrorCode.NOT_FOUND, "API 接口不存在");
     }
 
     /**
      * 处理请求方法不支持异常
      */
     @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
-    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+    @ResponseStatus(HttpStatus.OK)
     public Result<Void> handleHttpRequestMethodNotSupportedException(org.springframework.web.HttpRequestMethodNotSupportedException e) {
         log.warn("请求方法不支持: {} {}", e.getMethod(), e.getSupportedHttpMethods());
-        return Result.error(ErrorCode.METHOD_NOT_ALLOWED, "请求方法 " + e.getMethod() + " 不支持");
+        return Result.error(ErrorCode.METHOD_NOT_ALLOWED, "请求方法不支持: " + e.getMethod());
     }
 
     /**

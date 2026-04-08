@@ -64,9 +64,7 @@ public class InterviewSessionService {
         }
 
         // 获取 LLM 客户端
-        org.springframework.ai.chat.client.ChatClient chatClient = (request.llmProvider() != null && !request.llmProvider().isBlank())
-            ? llmProviderRegistry.getChatClient(request.llmProvider())
-            : llmProviderRegistry.getDefaultChatClient();
+        org.springframework.ai.chat.client.ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(request.llmProvider());
 
         // 生成面试问题
         List<InterviewQuestionDTO> questions = questionService.generateQuestions(
@@ -456,9 +454,7 @@ public class InterviewSessionService {
         if (entityOpt.isPresent()) {
             provider = entityOpt.get().getLlmProvider();
         }
-        org.springframework.ai.chat.client.ChatClient chatClient = (provider != null && !provider.isBlank())
-            ? llmProviderRegistry.getChatClient(provider)
-            : llmProviderRegistry.getDefaultChatClient();
+        org.springframework.ai.chat.client.ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
         InterviewReportDTO report = evaluationService.evaluateInterview(
             chatClient,

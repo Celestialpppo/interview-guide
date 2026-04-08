@@ -76,15 +76,7 @@ public class VoiceInterviewService {
         log.info("Created voice interview session: {} for role: {}, phase: {}",
                 saved.getId(), saved.getRoleType(), saved.getCurrentPhase());
 
-        return SessionResponseDTO.builder()
-                .sessionId(saved.getId())
-                .roleType(saved.getRoleType())
-                .currentPhase(saved.getCurrentPhase().name())
-                .status(saved.getStatus().name())
-                .startTime(saved.getStartTime())
-                .plannedDuration(saved.getPlannedDuration())
-                .webSocketUrl(String.format("ws://localhost:8080/ws/voice-interview/%d", saved.getId()))
-                .build();
+        return buildSessionResponse(saved);
     }
 
     /**
@@ -296,21 +288,10 @@ public class VoiceInterviewService {
         VoiceInterviewSessionEntity saved = sessionRepository.save(session);
         cacheSession(saved);
 
-        // Load and verify conversation history for resumed session
-        List<VoiceInterviewMessageEntity> history =
-            messageRepository.findBySessionIdOrderBySequenceNumAsc(sessionIdLong);
         log.info("Session {} resumed with {} messages in conversation history",
-            sessionId, history.size());
+            sessionId, messageRepository.countBySessionId(sessionIdLong));
 
-        return SessionResponseDTO.builder()
-            .sessionId(saved.getId())
-            .roleType(saved.getRoleType())
-            .currentPhase(saved.getCurrentPhase().name())
-            .status(saved.getStatus().name())
-            .startTime(saved.getStartTime())
-            .plannedDuration(saved.getPlannedDuration())
-            .webSocketUrl(String.format("ws://localhost:8080/ws/voice-interview/%d", saved.getId()))
-            .build();
+        return buildSessionResponse(saved);
     }
 
     /**
@@ -361,15 +342,7 @@ public class VoiceInterviewService {
             return null;
         }
 
-        return SessionResponseDTO.builder()
-                .sessionId(session.getId())
-                .roleType(session.getRoleType())
-                .currentPhase(session.getCurrentPhase().name())
-                .status(session.getStatus().name())
-                .startTime(session.getStartTime())
-                .plannedDuration(session.getPlannedDuration())
-                .webSocketUrl(String.format("ws://localhost:8080/ws/voice-interview/%d", session.getId()))
-                .build();
+        return buildSessionResponse(session);
     }
 
     /**
@@ -452,34 +425,34 @@ public class VoiceInterviewService {
      * 根据启用的阶段确定第一个阶段
      */
     private VoiceInterviewSessionEntity.InterviewPhase determineFirstPhase(CreateSessionRequest request) {
-        if (request.getIntroEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.INTRO;
-        } else if (request.getTechEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.TECH;
-        } else if (request.getProjectEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.PROJECT;
-        } else if (request.getHrEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.HR;
-        } else {
-            return VoiceInterviewSessionEntity.InterviewPhase.COMPLETED;
-        }
+        if (request.getIntroEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.INTRO;
+        if (request.getTechEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.TECH;
+        if (request.getProjectEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.PROJECT;
+        if (request.getHrEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.HR;
+        return VoiceInterviewSessionEntity.InterviewPhase.COMPLETED;
     }
 
     /**
      * Get first enabled phase from session
      */
     private VoiceInterviewSessionEntity.InterviewPhase getFirstEnabledPhase(VoiceInterviewSessionEntity session) {
-        if (session.getIntroEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.INTRO;
-        } else if (session.getTechEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.TECH;
-        } else if (session.getProjectEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.PROJECT;
-        } else if (session.getHrEnabled()) {
-            return VoiceInterviewSessionEntity.InterviewPhase.HR;
-        } else {
-            return VoiceInterviewSessionEntity.InterviewPhase.COMPLETED;
-        }
+        if (session.getIntroEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.INTRO;
+        if (session.getTechEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.TECH;
+        if (session.getProjectEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.PROJECT;
+        if (session.getHrEnabled()) return VoiceInterviewSessionEntity.InterviewPhase.HR;
+        return VoiceInterviewSessionEntity.InterviewPhase.COMPLETED;
+    }
+
+    private SessionResponseDTO buildSessionResponse(VoiceInterviewSessionEntity session) {
+        return SessionResponseDTO.builder()
+                .sessionId(session.getId())
+                .roleType(session.getRoleType())
+                .currentPhase(session.getCurrentPhase().name())
+                .status(session.getStatus().name())
+                .startTime(session.getStartTime())
+                .plannedDuration(session.getPlannedDuration())
+                .webSocketUrl(String.format("ws://localhost:8080/ws/voice-interview/%d", session.getId()))
+                .build();
     }
 
     /**
@@ -499,8 +472,7 @@ public class VoiceInterviewService {
      * Get next sequence number for messages in a session
      */
     private int getNextSequenceNum(Long sessionId) {
-        List<VoiceInterviewMessageEntity> messages = messageRepository.findBySessionIdOrderBySequenceNumAsc(sessionId);
-        return messages.size() + 1;
+        return (int) messageRepository.countBySessionId(sessionId) + 1;
     }
 
     /**

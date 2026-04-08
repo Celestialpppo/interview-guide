@@ -1,5 +1,7 @@
 package interview.guide.modules.interviewschedule.service;
 
+import interview.guide.common.exception.BusinessException;
+import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.interviewschedule.model.*;
 import interview.guide.modules.interviewschedule.repository.InterviewScheduleRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,39 +19,25 @@ public class InterviewScheduleService {
 
     private final InterviewScheduleRepository repository;
 
+    private static final String[] COPYABLE_FIELDS = {
+        "companyName", "position", "interviewTime", "interviewType",
+        "meetingLink", "roundNumber", "interviewer", "notes"
+    };
+
     @Transactional
     public InterviewScheduleDTO create(CreateInterviewRequest request) {
         InterviewScheduleEntity entity = new InterviewScheduleEntity();
-        entity.setCompanyName(request.getCompanyName());
-        entity.setPosition(request.getPosition());
-        entity.setInterviewTime(request.getInterviewTime());
-        entity.setInterviewType(request.getInterviewType());
-        entity.setMeetingLink(request.getMeetingLink());
-        entity.setRoundNumber(request.getRoundNumber());
-        entity.setInterviewer(request.getInterviewer());
-        entity.setNotes(request.getNotes());
+        BeanUtils.copyProperties(request, entity);
         entity.setStatus(InterviewStatus.PENDING);
 
-        InterviewScheduleEntity saved = repository.save(entity);
-        return toDTO(saved);
+        return toDTO(repository.save(entity));
     }
 
     @Transactional
     public InterviewScheduleDTO update(Long id, CreateInterviewRequest request) {
-        InterviewScheduleEntity entity = repository.findById(id)
-            .orElseThrow(() -> new RuntimeException("面试记录不存在: " + id));
-
-        entity.setCompanyName(request.getCompanyName());
-        entity.setPosition(request.getPosition());
-        entity.setInterviewTime(request.getInterviewTime());
-        entity.setInterviewType(request.getInterviewType());
-        entity.setMeetingLink(request.getMeetingLink());
-        entity.setRoundNumber(request.getRoundNumber());
-        entity.setInterviewer(request.getInterviewer());
-        entity.setNotes(request.getNotes());
-
-        InterviewScheduleEntity saved = repository.save(entity);
-        return toDTO(saved);
+        InterviewScheduleEntity entity = getByIdOrThrow(id);
+        BeanUtils.copyProperties(request, entity, "id", "status");
+        return toDTO(repository.save(entity));
     }
 
     @Transactional
@@ -59,12 +47,9 @@ public class InterviewScheduleService {
 
     @Transactional
     public InterviewScheduleDTO updateStatus(Long id, InterviewStatus status) {
-        InterviewScheduleEntity entity = repository.findById(id)
-            .orElseThrow(() -> new RuntimeException("面试记录不存在: " + id));
-
+        InterviewScheduleEntity entity = getByIdOrThrow(id);
         entity.setStatus(status);
-        InterviewScheduleEntity saved = repository.save(entity);
-        return toDTO(saved);
+        return toDTO(repository.save(entity));
     }
 
     public List<InterviewScheduleDTO> getAll(String status, LocalDateTime start, LocalDateTime end) {
@@ -84,9 +69,12 @@ public class InterviewScheduleService {
     }
 
     public InterviewScheduleDTO getById(Long id) {
-        InterviewScheduleEntity entity = repository.findById(id)
-            .orElseThrow(() -> new RuntimeException("面试记录不存在: " + id));
-        return toDTO(entity);
+        return toDTO(getByIdOrThrow(id));
+    }
+
+    private InterviewScheduleEntity getByIdOrThrow(Long id) {
+        return repository.findById(id)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SCHEDULE_NOT_FOUND, "面试日程不存在: " + id));
     }
 
     private InterviewScheduleDTO toDTO(InterviewScheduleEntity entity) {

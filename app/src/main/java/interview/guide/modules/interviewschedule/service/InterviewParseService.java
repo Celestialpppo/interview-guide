@@ -26,11 +26,16 @@ import java.util.regex.Pattern;
 public class InterviewParseService {
 
     private final LlmProviderRegistry llmProviderRegistry;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     // Date formatters
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER_2 = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm");
+
+    private static final Map<String, Integer> CHINESE_NUMBERS = Map.of(
+        "一", 1, "二", 2, "三", 3, "四", 4, "五", 5,
+        "六", 6, "七", 7, "八", 8, "九", 9, "十", 10
+    );
 
     // Feishu patterns
     private static final Pattern TIME_PATTERN_FEISHU = Pattern.compile("(?:时间|时段)[：:]\\s*(\\d{4}[-/]\\d{2}[-/]\\d{2}\\s+\\d{2}:\\d{2})");
@@ -292,9 +297,7 @@ public class InterviewParseService {
             String currentDate = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
             String prompt = String.format(PARSE_PROMPT, currentDate, rawText);
 
-            ChatClient chatClient = (provider != null && !provider.isBlank())
-                ? llmProviderRegistry.getChatClient(provider)
-                : llmProviderRegistry.getDefaultChatClient();
+            ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
             String content = chatClient.prompt()
                     .user(prompt)
@@ -408,16 +411,10 @@ public class InterviewParseService {
             return Integer.parseInt(text);
         }
 
-        // Chinese number mapping
-        Map<String, Integer> chineseNumbers = Map.of(
-                "一", 1, "二", 2, "三", 3, "四", 4, "五", 5,
-                "六", 6, "七", 7, "八", 8, "九", 9, "十", 10
-        );
-
         Matcher matcher = ROUND_NUMBER_PATTERN.matcher(text);
         if (matcher.find()) {
             String num = matcher.group();
-            return chineseNumbers.getOrDefault(num, Integer.parseInt(num.replaceAll("\\D", "")));
+            return CHINESE_NUMBERS.getOrDefault(num, Integer.parseInt(num.replaceAll("\\D", "")));
         }
 
         return 1;

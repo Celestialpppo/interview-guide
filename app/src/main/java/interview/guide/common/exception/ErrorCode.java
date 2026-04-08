@@ -62,7 +62,18 @@ public enum ErrorCode {
     AI_RATE_LIMIT_EXCEEDED(7005, "AI服务调用频率超限"),
 
     // ========== 限流模块错误 8xxx ==========
-    RATE_LIMIT_EXCEEDED(8001, "请求过于频繁，请稍后再试");
+    RATE_LIMIT_EXCEEDED(8001, "请求过于频繁，请稍后再试"),
+
+    // ========== 面试日程模块错误 9xxx ==========
+    INTERVIEW_SCHEDULE_NOT_FOUND(9001, "面试日程不存在"),
+
+    // ========== 语音面试模块错误 10xxx ==========
+    VOICE_SESSION_NOT_FOUND(10001, "语音面试会话不存在"),
+    VOICE_SESSION_ALREADY_ACTIVE(10002, "语音面试会话已在进行中"),
+    VOICE_SESSION_ALREADY_ENDED(10003, "语音面试会话已结束"),
+    VOICE_EVALUATION_FAILED(10004, "语音面试评估失败"),
+    VOICE_EVALUATION_IN_PROGRESS(10005, "语音面试评估正在进行中"),
+    VOICE_EVALUATION_NOT_FOUND(10006, "语音面试评估结果不存在");
     
     private final Integer code;
     private final String message;
