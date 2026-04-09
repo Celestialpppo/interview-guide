@@ -304,7 +304,7 @@ export default function VoiceInterviewPage() {
   };
 
   const handleCloseModal = () => {
-    navigate('/upload');
+    navigate('/history');
   };
 
   return (

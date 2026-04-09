@@ -62,20 +62,11 @@ export default function Interview({
     setError('');
 
     try {
-      // 如果有 resumeId，先检查是否有未完成的面试可以恢复
-      if (resumeId) {
-        const unfinished = await interviewApi.findUnfinishedSession(resumeId);
-        if (unfinished) {
-          restoreSession(unfinished);
-          return;
-        }
-      }
-
-      // 创建新面试
       const newSession = await interviewApi.createSession({
         resumeText,
         questionCount,
         resumeId,
+        forceCreate: true,
         llmProvider,
         skillId,
         difficulty,
@@ -98,38 +89,6 @@ export default function Interview({
       console.error(err);
     } finally {
       setIsCreating(false);
-    }
-  };
-
-  const restoreSession = (sessionToRestore: InterviewSession) => {
-    setSession(sessionToRestore);
-
-    const currentQ = sessionToRestore.questions[sessionToRestore.currentQuestionIndex];
-    if (currentQ) {
-      setCurrentQuestion(currentQ);
-
-      if (currentQ.userAnswer) {
-        setAnswer(currentQ.userAnswer);
-      }
-
-      // 恢复消息历史
-      const restoredMessages: Message[] = [];
-      for (let i = 0; i <= sessionToRestore.currentQuestionIndex; i++) {
-        const q = sessionToRestore.questions[i];
-        restoredMessages.push({
-          type: 'interviewer',
-          content: q.question,
-          category: q.category,
-          questionIndex: i
-        });
-        if (q.userAnswer) {
-          restoredMessages.push({
-            type: 'user',
-            content: q.userAnswer
-          });
-        }
-      }
-      setMessages(restoredMessages);
     }
   };
 

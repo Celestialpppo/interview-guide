@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {Calendar, ChevronRight, Database, FileStack, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
+import {Calendar, ChevronRight, Database, FileStack, MessageSquare, Moon, Sparkles, Sun, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
@@ -27,26 +27,19 @@ export default function Layout() {
   const navigate = useNavigate();
   const [interviewModalPreset, setInterviewModalPreset] = useState<{
     defaultMode: 'text' | 'voice';
+    defaultResumeId?: number;
     title: string;
     subtitle: string;
     startButtonText: string;
   } | null>(null);
 
-  const openTextInterviewModal = () => {
+  const openInterviewModalWithResume = (resumeId: number) => {
     setInterviewModalPreset({
       defaultMode: 'text',
-      title: '文字模拟面试',
-      subtitle: '配置文字面试参数，开始逐题作答',
-      startButtonText: '开始文字面试',
-    });
-  };
-
-  const openVoiceInterviewModal = () => {
-    setInterviewModalPreset({
-      defaultMode: 'voice',
-      title: '语音模拟面试',
-      subtitle: '配置语音面试参数，开始实时对话',
-      startButtonText: '开始语音面试',
+      defaultResumeId: resumeId,
+      title: '开始模拟面试',
+      subtitle: '配置面试参数，开始练习',
+      startButtonText: '开始面试',
     });
   };
 
@@ -90,40 +83,13 @@ export default function Layout() {
   // 按业务模块组织的导航项
   const navGroups: NavGroup[] = [
     {
-      id: 'career',
-      title: '简历管理',
-      items: [
-        { id: 'upload', path: '/upload', label: '上传简历', icon: Upload, description: 'AI 分析简历' },
-        { id: 'resumes', path: '/history', label: '简历库', icon: FileStack, description: '管理所有简历' },
-      ],
-    },
-    {
       id: 'interview',
-      title: '模拟面试',
+      title: '面试准备',
       items: [
-        {
-          id: 'start-text-interview',
-          path: '#text-interview-modal',
-          label: '文字面试',
-          icon: MessageSquare,
-          description: '文字问答练习',
-          action: openTextInterviewModal,
-        },
-        {
-          id: 'start-voice-interview',
-          path: '#voice-interview',
-          label: '语音面试',
-          icon: Mic,
-          description: '实时语音对话',
-          action: openVoiceInterviewModal,
-        },
-      ],
-    },
-    {
-      id: 'records',
-      title: '面试记录',
-      items: [
-        { id: 'interviews', path: '/interviews', label: '历史列表', icon: Users, description: '查看面试历史' },
+        { id: 'resumes', path: '/history', label: '简历管理', icon: FileStack, description: '管理简历，AI 分析' },
+        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '文字/语音面试练习' },
+        { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '查看面试历史' },
+        { id: 'interview-schedule', path: '/interview-schedule', label: '面试日程', icon: Calendar, description: '管理面试安排' },
       ],
     },
     {
@@ -134,20 +100,13 @@ export default function Layout() {
         { id: 'chat', path: '/knowledgebase/chat', label: '问答助手', icon: MessageSquare, description: '基于知识库问答' },
       ],
     },
-    {
-      id: 'schedule',
-      title: '面试日程',
-      items: [
-        { id: 'interview-schedule', path: '/interview-schedule', label: '日程管理', icon: Calendar, description: '管理面试安排' },
-      ],
-    },
   ];
 
   // 判断当前页面是否匹配导航项
   const isActive = (path: string) => {
     if (path.startsWith('#')) return false;
-    if (path === '/upload') {
-      return currentPath === '/upload' || currentPath === '/';
+    if (path === '/history') {
+      return currentPath === '/history' || currentPath === '/' || currentPath.startsWith('/history/');
     }
     if (path === '/knowledgebase') {
       return currentPath === '/knowledgebase' || currentPath === '/knowledgebase/upload';
@@ -161,7 +120,7 @@ export default function Layout() {
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-700 fixed h-screen left-0 top-0 z-50 flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-          <Link to="/upload" className="flex items-center gap-3">
+          <Link to="/history" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/30">
               <Sparkles className="w-5 h-5" />
             </div>
@@ -212,18 +171,19 @@ export default function Layout() {
                         <button
                           key={item.id}
                           onClick={item.action}
-                          className="group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200
+                          className="group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200
                             text-slate-600 dark:text-slate-400
-                            hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-600 dark:hover:text-primary-400"
+                            hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                         >
-                          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400
-                            group-hover:bg-primary-100 dark:group-hover:bg-primary-900/50 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors
+                            bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400
+                            group-hover:bg-slate-200 dark:group-hover:bg-slate-700 group-hover:text-slate-700 dark:group-hover:text-white">
                             <item.icon className="w-5 h-5" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <span className="text-sm font-medium block group-hover:font-semibold transition-all">{item.label}</span>
+                            <span className="text-sm font-medium block">{item.label}</span>
                             {item.description && (
-                              <span className="text-xs text-slate-400 dark:text-slate-500 truncate block group-hover:text-primary-500/80 dark:group-hover:text-primary-400/60 transition-colors">
+                              <span className="text-xs text-slate-400 dark:text-slate-500 truncate block">
                                 {item.description}
                               </span>
                             )}
@@ -288,7 +248,7 @@ export default function Layout() {
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3 }}
         >
-          <Outlet />
+          <Outlet context={{ openInterviewModalWithResume }} />
         </motion.div>
       </main>
 
@@ -298,7 +258,8 @@ export default function Layout() {
         onClose={() => setInterviewModalPreset(null)}
         onStart={handleInterviewStart}
         defaultMode={interviewModalPreset?.defaultMode || 'text'}
-        hideModeSwitch
+        defaultResumeId={interviewModalPreset?.defaultResumeId}
+        hideModeSwitch={interviewModalPreset?.defaultResumeId == null}
         title={interviewModalPreset?.title || '开始模拟面试'}
         subtitle={interviewModalPreset?.subtitle || '选择面试模式和主题，快速开始'}
         startButtonText={interviewModalPreset?.startButtonText || '开始面试'}

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import { useEffect, useState, Suspense, lazy } from 'react';
 import { historyApi, type InterviewDetail } from './api/history';
@@ -18,6 +18,7 @@ const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePa
 const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewSchedulePage = lazy(() => import('./pages/InterviewSchedulePage'));
+const InterviewHubPage = lazy(() => import('./pages/InterviewHubPage'));
 const InterviewDetailPanel = lazy(() => import('./components/InterviewDetailPanel'));
 
 // Loading component
@@ -54,6 +55,7 @@ function HistoryListWrapper() {
 function ResumeDetailWrapper() {
   const { resumeId } = useParams<{ resumeId: string }>();
   const navigate = useNavigate();
+  const { openInterviewModalWithResume } = useOutletContext<{ openInterviewModalWithResume: (resumeId: number) => void }>();
 
   if (!resumeId) {
     return <Navigate to="/history" replace />;
@@ -63,8 +65,8 @@ function ResumeDetailWrapper() {
     navigate('/history');
   };
 
-  const handleStartInterview = (_resumeText: string, resumeId: number) => {
-    navigate('/interview', { state: { resumeId, interviewConfig: { skillId: 'java-backend', difficulty: 'mid' } } });
+  const handleStartInterview = (id: number) => {
+    openInterviewModalWithResume(id);
   };
 
   return (
@@ -124,7 +126,7 @@ function InterviewWrapper() {
       navigate(`/history/${effectiveResumeId}`, { replace: false });
       return;
     }
-    navigate('/upload', { replace: false });
+    navigate('/history', { replace: false });
   };
 
   const handleInterviewComplete = () => {
@@ -160,8 +162,8 @@ function App() {
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<Layout />}>
-            {/* 默认重定向到上传页面 */}
-            <Route index element={<Navigate to="/upload" replace />} />
+            {/* 默认重定向到简历管理页面 */}
+            <Route index element={<Navigate to="/history" replace />} />
 
             {/* 上传页面 */}
             <Route path="upload" element={<UploadPageWrapper />} />
@@ -171,6 +173,9 @@ function App() {
 
             {/* 简历详情 */}
             <Route path="history/:resumeId" element={<ResumeDetailWrapper />} />
+
+            {/* 面试中心 */}
+            <Route path="interview-hub" element={<InterviewHubPage />} />
 
             {/* 面试记录列表 */}
             <Route path="interviews" element={<InterviewHistoryWrapper />} />
@@ -211,16 +216,21 @@ function App() {
 // 面试记录页面包装器
 function InterviewHistoryWrapper() {
   const navigate = useNavigate();
+  const { openInterviewModalWithResume } = useOutletContext<{ openInterviewModalWithResume: (resumeId: number) => void }>();
 
   const handleBack = () => {
-    navigate('/upload');
+    navigate('/history');
   };
 
   const handleViewInterview = async (sessionId: string, _resumeId?: number) => {
     navigate(`/interviews/${sessionId}`);
   };
 
-  return <InterviewHistoryPage onBack={handleBack} onViewInterview={handleViewInterview} />;
+  const handleRestartInterview = (resumeId: number) => {
+    openInterviewModalWithResume(resumeId);
+  };
+
+  return <InterviewHistoryPage onBack={handleBack} onViewInterview={handleViewInterview} onRestartInterview={handleRestartInterview} />;
 }
 
 // 面试详情报告页面包装器
@@ -314,7 +324,7 @@ function KnowledgeBaseQueryPageWrapper() {
     if (isChatMode) {
       navigate('/knowledgebase');
     } else {
-      navigate('/upload');
+      navigate('/history');
     }
   };
 

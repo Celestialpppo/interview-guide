@@ -20,6 +20,7 @@ import {
   Mic,
   PlayCircle,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
   TrendingUp,
@@ -147,6 +148,7 @@ function TypeBadge({ type }: { type: 'text' | 'voice' }) {
 interface InterviewHistoryPageProps {
   onBack: () => void;
   onViewInterview: (sessionId: string, resumeId?: number) => void;
+  onRestartInterview?: (resumeId: number) => void;
 }
 
 /** Shallow comparison for polling change-detection */
@@ -160,7 +162,7 @@ function itemsEqual(a: UnifiedInterviewItem[], b: UnifiedInterviewItem[]): boole
   return true;
 }
 
-export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview }: InterviewHistoryPageProps) {
+export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview, onRestartInterview }: InterviewHistoryPageProps) {
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedInterviewItem[]>([]);
   const [stats, setStats] = useState<InterviewStats | null>(null);
@@ -538,6 +540,15 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview 
                             ) : (
                               <Download className="w-4 h-4" />
                             )}
+                          </button>
+                        )}
+                        {isEvaluateCompleted(item) && item.type === 'text' && item.resumeId && onRestartInterview && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onRestartInterview(item.resumeId!); }}
+                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                            title="重新面试"
+                          >
+                            <RotateCcw className="w-4 h-4" />
                           </button>
                         )}
                         {item.type === 'text' && (

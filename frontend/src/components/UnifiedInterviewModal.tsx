@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { skillApi, type SkillDTO, type CategoryDTO } from '../api/skill';
 import { historyApi, type ResumeListItem } from '../api/history';
+import { getSkillIcon } from '../utils/skillIcons';
 
 export type InterviewMode = 'text' | 'voice';
 export type Difficulty = 'junior' | 'mid' | 'senior';
@@ -35,6 +36,7 @@ interface UnifiedInterviewModalProps {
   onClose: () => void;
   onStart: (config: UnifiedInterviewConfig) => void;
   defaultMode?: InterviewMode;
+  defaultResumeId?: number;
   hideModeSwitch?: boolean;
   title?: string;
   subtitle?: string;
@@ -52,6 +54,7 @@ export default function UnifiedInterviewModal({
   onClose,
   onStart,
   defaultMode = 'text',
+  defaultResumeId,
   hideModeSwitch = false,
   title = '开始模拟面试',
   subtitle = '选择面试模式和主题，快速开始',
@@ -80,9 +83,13 @@ export default function UnifiedInterviewModal({
   useEffect(() => {
     if (isOpen) {
       setMode(defaultMode);
+      if (defaultResumeId != null) {
+        setResumeId(defaultResumeId);
+        setShowMore(true);
+      }
       Promise.all([loadSkills(), loadResumes()]);
     }
-  }, [isOpen, defaultMode]);
+  }, [isOpen, defaultMode, defaultResumeId]);
 
   const loadSkills = async () => {
     setLoadingSkills(true);
@@ -241,7 +248,8 @@ export default function UnifiedInterviewModal({
                     <div className="grid grid-cols-2 gap-2">
                       {skills.map(skill => {
                         const selected = skillId === skill.id;
-                        const icon = skill.display?.icon || '📋';
+                        const IconComponent = getSkillIcon(skill.id);
+                        const fallbackEmoji = skill.display?.icon || '📋';
                         return (
                           <button
                             key={skill.id}
@@ -255,7 +263,10 @@ export default function UnifiedInterviewModal({
                             <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${
                               selected ? skill.display?.iconBg || 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
                             }`}>
-                              <span className={selected ? (skill.display?.iconColor || 'text-primary-600') : ''}>{icon}</span>
+                              {IconComponent
+                                ? <IconComponent className={`w-5 h-5 ${selected ? (skill.display?.iconColor || 'text-primary-600') : 'text-slate-500 dark:text-slate-400'}`} />
+                                : <span className={selected ? (skill.display?.iconColor || 'text-primary-600') : ''}>{fallbackEmoji}</span>
+                              }
                             </div>
                             <div className="flex-1 min-w-0">
                               <span className={`text-xs font-medium block truncate ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -277,8 +288,15 @@ export default function UnifiedInterviewModal({
                             : 'border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600'
                           }`}
                       >
-                        <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-100 dark:bg-slate-700 flex-shrink-0">
-                          <span className="text-base">✨</span>
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          isCustomSkill ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
+                        }`}>
+                          {(() => {
+                            const CustomIcon = getSkillIcon('custom');
+                            return CustomIcon
+                              ? <CustomIcon className={`w-5 h-5 ${isCustomSkill ? 'text-primary-600 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400'}`} />
+                              : <span className="text-base">✨</span>;
+                          })()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className={`text-xs font-medium block ${isCustomSkill ? 'text-primary-700 dark:text-primary-300' : 'text-slate-500 dark:text-slate-400'}`}>
