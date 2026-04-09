@@ -5,6 +5,7 @@ import { historyApi, type InterviewDetail } from './api/history';
 import type { UploadKnowledgeBaseResponse } from './api/knowledgebase';
 import type { Difficulty } from './components/UnifiedInterviewModal';
 import { Loader2 } from 'lucide-react';
+import { ROUTES } from './constants/routes';
 
 // Lazy load components
 const UploadPage = lazy(() => import('./pages/UploadPage'));
@@ -191,6 +192,12 @@ function App() {
             {/* 模拟面试 */}
             <Route path="interview/:resumeId" element={<InterviewWrapper />} />
 
+            {/* 语音面试 */}
+            <Route path="voice-interview" element={<VoiceInterviewPageWrapper />} />
+
+            {/* 语音面试评估报告 */}
+            <Route path="voice-interview/:sessionId/evaluation" element={<VoiceInterviewEvaluationPage />} />
+
             {/* 知识库管理 */}
             <Route path="knowledgebase" element={<KnowledgeBaseManagePageWrapper />} />
 
@@ -204,11 +211,6 @@ function App() {
             <Route path="knowledgebase/chat" element={<KnowledgeBaseQueryPageWrapper />} />
           </Route>
 
-          {/* 语音面试 (Fullscreen, outside of Layout) */}
-          <Route path="voice-interview" element={<VoiceInterviewPageWrapper />} />
-
-          {/* 语音面试评估报告 (Fullscreen, outside of Layout) */}
-          <Route path="voice-interview/:sessionId/evaluation" element={<VoiceInterviewEvaluationPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>
@@ -310,7 +312,7 @@ function KnowledgeBaseManagePageWrapper() {
   const navigate = useNavigate();
 
   const handleUpload = () => {
-    navigate('/knowledgebase/upload');
+    navigate(ROUTES.knowledgebaseUpload);
   };
 
   const handleChat = () => {
@@ -335,7 +337,7 @@ function KnowledgeBaseQueryPageWrapper() {
   };
 
   const handleUpload = () => {
-    navigate('/knowledgebase/upload');
+    navigate(ROUTES.knowledgebaseUpload);
   };
 
   return <KnowledgeBaseQueryPage onBack={handleBack} onUpload={handleUpload} />;

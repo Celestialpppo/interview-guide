@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import InterviewMessageBubble from './InterviewMessageBubble';
 
 interface Message {
   role: 'user' | 'ai';
@@ -81,63 +82,44 @@ export default function RealtimeSubtitle({
       {/* Chat History */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-5 space-y-5 scroll-smooth"
+        className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5 scroll-smooth"
       >
         <AnimatePresence initial={false}>
           {/* History Messages */}
           {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-primary-500 text-white rounded-tr-sm shadow-md shadow-primary-500/20'
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-sm'
-                }`}
-              >
-                {msg.text}
-              </div>
-            </motion.div>
+            <div key={msg.id}>
+              <InterviewMessageBubble
+                role={msg.role === 'user' ? 'user' : 'interviewer'}
+                text={msg.text}
+              />
+            </div>
           ))}
 
           {/* Current AI Response (Active) */}
           {isAiSpeaking && (aiText || displayedAiText) && (
-            <motion.div
-              key="active-ai"
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="flex justify-start"
-            >
-              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tl-sm bg-slate-100 dark:bg-slate-700 border border-primary-300/60 dark:border-primary-700/40 text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
-                {displayedAiText || aiText}
-                {isTyping && (
-                  <motion.span
-                    className="inline-block w-1 h-3.5 bg-primary-500 ml-1.5 translate-y-0.5 rounded-full"
-                    animate={{ opacity: [1, 0, 1] }}
-                    transition={{ duration: 0.8, repeat: Infinity }}
-                  />
-                )}
-              </div>
-            </motion.div>
+            <InterviewMessageBubble
+              role="interviewer"
+              text={displayedAiText || aiText}
+              highlight
+              suffix={isTyping ? (
+                <motion.span
+                  className="inline-block w-1 h-3.5 bg-primary-500 ml-1.5 translate-y-0.5 rounded-full"
+                  animate={{ opacity: [1, 0, 1] }}
+                  transition={{ duration: 0.8, repeat: Infinity }}
+                />
+              ) : null}
+            />
           )}
 
           {/* Current User Input (Real-time) */}
           {userText && (
-            <motion.div
-              key="active-user"
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="flex justify-end"
-            >
-              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tr-sm bg-primary-500/90 border border-primary-400/70 text-white text-sm italic leading-relaxed">
-                {userText}
-                <span className="ml-1 animate-pulse">...</span>
-              </div>
-            </motion.div>
+            <InterviewMessageBubble
+              role="user"
+              text={userText}
+              highlight
+              italic
+              suffix={<span className="ml-1 animate-pulse">...</span>}
+            />
           )}
 
           {/* Empty State */}

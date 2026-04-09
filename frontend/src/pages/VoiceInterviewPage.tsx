@@ -310,7 +310,7 @@ export default function VoiceInterviewPage() {
 
   if (!autoStartRef.current && !presetVoiceConfig) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-6">
+      <div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-8 text-center max-w-md w-full">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <p className="text-slate-700 dark:text-slate-200 text-lg font-semibold mb-2">未检测到语音面试配置</p>
@@ -327,8 +327,8 @@ export default function VoiceInterviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800">
-      <div className="max-w-7xl mx-auto px-6 py-8 pb-12">
+    <div className="pb-10">
+      <div className="max-w-7xl mx-auto">
         <InterviewPageHeader
           title="语音模拟面试"
           subtitle="实时语音对话，面试官会根据你的回答持续追问"
@@ -463,7 +463,7 @@ export default function VoiceInterviewPage() {
             </div>
           </div>
 
-          <div className="min-h-[520px] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="h-[520px] md:h-[560px] xl:h-[calc(100vh-240px)] xl:max-h-[760px] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
             <RealtimeSubtitle
               messages={messages}
               userText={userText}

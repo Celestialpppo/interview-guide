@@ -103,13 +103,14 @@ public class UnifiedEvaluationService {
                                      String resumeText) {
         log.info("开始评估面试: sessionId={}, 共{}题", sessionId, qaRecords.size());
 
-        String safeResumeText = resumeText != null ? resumeText : "";
-        String resumeSummary = safeResumeText.length() > 500
-            ? safeResumeText.substring(0, 500) + "..."
-            : safeResumeText;
+        String resumeContext = resumeText != null ? resumeText : "";
+        // 超长简历截断，保留前 3000 字符（约 1500~2000 tokens），避免极端情况下 token 消耗过大
+        if (resumeContext.length() > 3000) {
+            resumeContext = resumeContext.substring(0, 3000) + "\n...(简历内容过长，已截断)";
+        }
 
         // 分批评估
-        List<BatchResult> batchResults = evaluateInBatches(chatClient, sessionId, resumeSummary, qaRecords);
+        List<BatchResult> batchResults = evaluateInBatches(chatClient, sessionId, resumeContext, qaRecords);
 
         // 合并批次结果
         List<QuestionEvalDTO> mergedEvaluations = mergeQuestionEvaluations(batchResults);
@@ -119,7 +120,7 @@ public class UnifiedEvaluationService {
 
         // 二次汇总
         SummaryDTO summary = summarizeBatchResults(
-            chatClient, sessionId, resumeSummary, qaRecords,
+            chatClient, sessionId, resumeContext, qaRecords,
             mergedEvaluations, fallbackFeedback, fallbackStrengths, fallbackImprovements
         );
 
@@ -128,24 +129,24 @@ public class UnifiedEvaluationService {
     }
 
     private List<BatchResult> evaluateInBatches(ChatClient chatClient, String sessionId,
-                                                 String resumeSummary, List<QaRecord> qaRecords) {
+                                                 String resumeContext, List<QaRecord> qaRecords) {
         List<BatchResult> results = new ArrayList<>();
         for (int start = 0; start < qaRecords.size(); start += evaluationBatchSize) {
             int end = Math.min(start + evaluationBatchSize, qaRecords.size());
             List<QaRecord> batch = qaRecords.subList(start, end);
-            BatchReportDTO report = evaluateBatch(chatClient, sessionId, resumeSummary, batch);
+            BatchReportDTO report = evaluateBatch(chatClient, sessionId, resumeContext, batch);
             results.add(new BatchResult(start, end, report));
         }
         return results;
     }
 
     private BatchReportDTO evaluateBatch(ChatClient chatClient, String sessionId,
-                                          String resumeSummary, List<QaRecord> batch) {
+                                          String resumeContext, List<QaRecord> batch) {
         String qaRecords = buildQARecords(batch);
         String systemPrompt = systemPromptTemplate.render();
 
         Map<String, Object> variables = new HashMap<>();
-        variables.put("resumeText", resumeSummary);
+        variables.put("resumeText", resumeContext);
         variables.put("qaRecords", qaRecords);
         String userPrompt = userPromptTemplate.render(variables);
 
@@ -221,13 +222,13 @@ public class UnifiedEvaluationService {
     }
 
     private SummaryDTO summarizeBatchResults(
-            ChatClient chatClient, String sessionId, String resumeSummary,
+            ChatClient chatClient, String sessionId, String resumeContext,
             List<QaRecord> qaRecords, List<QuestionEvalDTO> evaluations,
             String fallbackFeedback, List<String> fallbackStrengths, List<String> fallbackImprovements) {
         try {
             String summarySystem = summarySystemPromptTemplate.render();
             Map<String, Object> vars = new HashMap<>();
-            vars.put("resumeText", resumeSummary);
+            vars.put("resumeText", resumeContext);
             vars.put("categorySummary", buildCategorySummary(qaRecords, evaluations));
             vars.put("questionHighlights", buildQuestionHighlights(qaRecords, evaluations));
             vars.put("fallbackOverallFeedback", fallbackFeedback);
