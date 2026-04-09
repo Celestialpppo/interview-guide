@@ -1,0 +1,14 @@
+name: Python 后端开发
+description: 适合 Python 后端工程师面试，涵盖 Python 基础、Web 框架、数据库等
+display:
+  icon: 🐍
+  gradient: from-green-500 to-teal-500
+  iconBg: bg-green-100 dark:bg-green-900/30
+  iconColor: text-green-600 dark:text-green-400
+categories:
+  - { key: PYTHON_BASIC, label: Python 基础, priority: CORE }
+  - { key: DATABASE, label: 数据库, priority: CORE }
+  - { key: DJANGO_FLASK, label: Django/Flask, priority: NORMAL }
+  - { key: CACHE, label: 缓存, priority: NORMAL }
+  - { key: DEPLOY, label: 部署, priority: NORMAL }
+  - { key: PROJECT, label: 项目经历, priority: ALWAYS_ONE }

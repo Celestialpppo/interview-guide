@@ -10,12 +10,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateSessionRequest {
-    private String roleType; // "ali-p8", "byteance-algo", "tencent-backend"
+    private String roleType; // 向后兼容，新请求可不传（服务层会用 skillId 填充）
+    private String skillId;  // 模板 ID，如 "java-backend", "algorithm-bytedance" 等
+    private String difficulty; // "junior", "mid", "senior"
     private String customJdText;
-    private Long resumeId; // Add resumeId
+    private Long resumeId;
 
     @Builder.Default
-    private Boolean introEnabled = false; // Default to false
+    private Boolean introEnabled = false;
     @Builder.Default
     private Boolean techEnabled = true;
     @Builder.Default
@@ -24,7 +26,7 @@ public class CreateSessionRequest {
     private Boolean hrEnabled = true;
     @Builder.Default
     private Integer plannedDuration = 30;
-    
+
     @Builder.Default
     private String llmProvider = "dashscope";
 }

@@ -211,8 +211,7 @@ String result = structuredOutputInvoker.invokeStructuredOutput(prompt, ChatClien
 
 - PostgreSQL + pgvector（向量搜索，1024 维 COSINE）
 - JPA 实体使用 `@Data`、`@Builder`、`@NoArgsConstructor`、`@AllArgsConstructor`
-- `ddl-auto` 开发环境 `update`，生产环境 `false`
-- Flyway 管理数据库迁移（`resources/db/migration/`）
+- `ddl-auto` 开发环境 `update`，生产环境 `false`（表结构由 JPA Entity 注解驱动，无需手动迁移）
 
 ---
 

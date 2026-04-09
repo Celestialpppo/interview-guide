@@ -1,5 +1,6 @@
 package interview.guide.modules.interview.service;
 
+import interview.guide.common.constant.CommonConstants.InterviewDefaults;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
@@ -38,31 +39,35 @@ public class InterviewPersistenceService {
     private final ObjectMapper objectMapper;
     
     /**
-     * 保存新的面试会话
+     * 保存新的面试会话（支持可选简历）
      */
     @Transactional(rollbackFor = Exception.class)
-    public InterviewSessionEntity saveSession(String sessionId, Long resumeId, 
-                                              int totalQuestions, 
+    public InterviewSessionEntity saveSession(String sessionId, Long resumeId,
+                                              int totalQuestions,
                                               List<InterviewQuestionDTO> questions,
-                                              String llmProvider) {
+                                              String llmProvider,
+                                              String skillId,
+                                              String difficulty) {
         try {
-            Optional<ResumeEntity> resumeOpt = resumeRepository.findById(resumeId);
-            if (resumeOpt.isEmpty()) {
-                throw new BusinessException(ErrorCode.RESUME_NOT_FOUND);
-            }
-            
             InterviewSessionEntity session = new InterviewSessionEntity();
             session.setSessionId(sessionId);
-            session.setResume(resumeOpt.get());
             session.setTotalQuestions(totalQuestions);
             session.setCurrentQuestionIndex(0);
             session.setStatus(InterviewSessionEntity.SessionStatus.CREATED);
             session.setQuestionsJson(objectMapper.writeValueAsString(questions));
-            session.setLlmProvider(llmProvider != null ? llmProvider : "dashscope");
-            
+            session.setLlmProvider(llmProvider != null ? llmProvider : InterviewDefaults.LLM_PROVIDER);
+            session.setSkillId(skillId != null ? skillId : InterviewDefaults.SKILL_ID);
+            session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);
+
+            // 简历可选：有 resumeId 则关联简历
+            if (resumeId != null) {
+                Optional<ResumeEntity> resumeOpt = resumeRepository.findById(resumeId);
+                resumeOpt.ifPresent(session::setResume);
+            }
+
             InterviewSessionEntity saved = sessionRepository.save(session);
-            log.info("面试会话已保存: sessionId={}, resumeId={}, llmProvider={}", sessionId, resumeId, llmProvider);
-            
+            log.info("面试会话已保存: sessionId={}, skillId={}, resumeId={}", sessionId, skillId, resumeId);
+
             return saved;
         } catch (JacksonException e) {
             log.error("序列化问题列表失败: {}", e.getMessage(), e);
@@ -248,6 +253,13 @@ public class InterviewPersistenceService {
      */
     public List<InterviewSessionEntity> findByResumeId(Long resumeId) {
         return sessionRepository.findByResumeIdOrderByCreatedAtDesc(resumeId);
+    }
+
+    /**
+     * 获取所有面试记录（按创建时间倒序）
+     */
+    public List<InterviewSessionEntity> findAll() {
+        return sessionRepository.findAllByOrderByCreatedAtDesc();
     }
     
     /**

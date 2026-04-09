@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Clock, PhoneOff, AlertCircle, Bot, Mic, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
 import RealtimeSubtitle from '../components/RealtimeSubtitle';
-import PhaseSetupModal, { PhaseConfig } from '../components/PhaseSetupModal';
-import { getRoleLabel } from '../utils/voiceInterview';
+import { skillApi, type SkillDTO } from '../api/skill';
+import { getTemplateName } from '../utils/voiceInterview';
 import {
   voiceInterviewApi,
-  CreateSessionRequest,
   connectWebSocket,
   VoiceInterviewWebSocket,
 } from '../api/voiceInterview';
@@ -16,11 +15,24 @@ import {
 export default function VoiceInterviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const entryState = (location.state as {
+    voiceConfig?: {
+      skillId: string;
+      difficulty?: string;
+      techEnabled: boolean;
+      projectEnabled: boolean;
+      hrEnabled: boolean;
+      plannedDuration: number;
+      resumeId?: number;
+      llmProvider?: string;
+    };
+  } | null) || {};
+  const presetVoiceConfig = entryState.voiceConfig;
   const queryParams = new URLSearchParams(location.search);
-  const initialRoleType = (queryParams.get('role') || 'ali-p8') as CreateSessionRequest['roleType'];
+  const urlSkillId = queryParams.get('skillId') || undefined;
+  const effectiveSkillId = presetVoiceConfig?.skillId ?? urlSkillId ?? 'java-backend';
 
   // UI state
-  const [showPhaseModal, setShowPhaseModal] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [currentPhase, setCurrentPhase] = useState('INTRO');
@@ -34,15 +46,30 @@ export default function VoiceInterviewPage() {
   const [aiAudio, setAiAudio] = useState('');
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [currentRoleType, setCurrentRoleType] = useState<string>(initialRoleType || 'ali-p8');
+  const [templateName, setTemplateName] = useState<string>('');
+
+  // Skills for template name lookup
+  const [skills, setSkills] = useState<SkillDTO[]>([]);
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<VoiceInterviewWebSocket | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement>(null);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  /** AI 播报时不向 ASR 送麦，避免扬声器回声灌进识别、多轮后连接异常；抢话 onSpeechStart 或播完 onEnded 后恢复 */
+  const autoStartRef = useRef(false);
   const blockMicToServerRef = useRef(false);
+
+  // Load skills for template name display
+  useEffect(() => {
+    skillApi.listSkills().then(setSkills).catch(console.error);
+  }, []);
+
+  // Derive template name from skills
+  useEffect(() => {
+    if (skills.length > 0 && effectiveSkillId) {
+      setTemplateName(getTemplateName(effectiveSkillId, skills));
+    }
+  }, [skills, effectiveSkillId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -58,7 +85,7 @@ export default function VoiceInterviewPage() {
 
   // Start interview timer
   useEffect(() => {
-    if (!showPhaseModal && sessionId && connectionStatus === 'connected') {
+    if (sessionId && connectionStatus === 'connected') {
       startTimer();
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -69,27 +96,16 @@ export default function VoiceInterviewPage() {
         clearInterval(timerRef.current);
       }
     };
-  }, [showPhaseModal, sessionId, connectionStatus]);
+  }, [sessionId, connectionStatus]);
 
   // Auto-play audio when aiAudio changes
   useEffect(() => {
     if (aiAudio && audioPlayerRef.current) {
-      console.log('aiAudio changed, attempting to play, audio element:', audioPlayerRef.current);
-      console.log('Audio src length:', audioPlayerRef.current.src?.length);
-
-      // Some browsers require user interaction before allowing autoplay
       const playPromise = audioPlayerRef.current.play();
-
       if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log('Audio playback started successfully');
-          })
-          .catch((error) => {
-            console.error('Audio playback failed:', error);
-            // Browser may have blocked autoplay, show user-friendly message
-            setError('请点击页面任意位置以启用音频播放');
-          });
+        playPromise.catch(() => {
+          setError('请点击页面任意位置以启用音频播放');
+        });
       }
     }
   }, [aiAudio]);
@@ -116,128 +132,104 @@ export default function VoiceInterviewPage() {
     return phaseMap[phase] || phase;
   };
 
-  const handleRoleTypeChange = (newRoleType: string) => {
-    setCurrentRoleType(newRoleType);
-    // Update URL to reflect the selected role type
-    const newUrl = `/voice-interview?role=${newRoleType}`;
-    window.history.replaceState({}, '', newUrl);
-  };
-
-  const handlePhaseConfig = async (config: PhaseConfig) => {
-    console.log('handlePhaseConfig called with config:', config);
-
-    // Use roleType from config, fallback to initialRoleType
-    const roleType = config.roleType || initialRoleType;
-
-    if (!roleType) {
-      setError('无效的面试角色');
-      return;
-    }
-
-    // Update current role type for display (URL already updated in handleRoleTypeChange)
-    setCurrentRoleType(roleType);
+  const handlePhaseConfig = useCallback(async (config: {
+    skillId: string;
+    difficulty?: string;
+    techEnabled: boolean;
+    projectEnabled: boolean;
+    hrEnabled: boolean;
+    plannedDuration: number;
+    resumeId?: number;
+    llmProvider?: string;
+  }) => {
     setError(null);
     setConnectionStatus('connecting');
 
     try {
-      console.log('Creating session...');
       const session = await voiceInterviewApi.createSession({
-        roleType: roleType as 'ali-p8' | 'byteance-algo' | 'tencent-backend', // Type assertion
+        skillId: config.skillId,
+        difficulty: config.difficulty,
         introEnabled: false,
         techEnabled: config.techEnabled,
         projectEnabled: config.projectEnabled,
         hrEnabled: config.hrEnabled,
         plannedDuration: config.plannedDuration,
-        customJdText: config.customJD,
         resumeId: config.resumeId,
         llmProvider: config.llmProvider,
       });
 
-      console.log('Session created:', session);
       setSessionId(session.sessionId);
       setCurrentPhase(session.currentPhase);
 
-      // Prepare WebSocket URL
       const wsUrl = session.webSocketUrl || `ws://localhost:8080/ws/voice-interview/${session.sessionId}`;
-      console.log('WebSocket URL prepared:', wsUrl);
 
-      // Close modal first
-      setShowPhaseModal(false);
-      console.log('Modal closed, main interface should now be visible');
-
-      // 延迟连接 WebSocket，确保 DOM 已经准备好
       setTimeout(() => {
-        console.log('Connecting WebSocket to:', wsUrl);
-
         try {
           wsRef.current = connectWebSocket(
             session.sessionId,
             wsUrl,
             {
               onOpen: () => {
-                console.log('WebSocket connected successfully');
                 setConnectionStatus('connected');
               },
-              onMessage: (message) => {
-                console.log('WebSocket message received:', message);
-              },
+              onMessage: (_message) => {},
               onSubtitle: (text, isFinal) => {
-                // Update user text in real-time
-                console.log('Subtitle received:', text, 'isFinal:', isFinal);
                 setUserText(text);
-
                 if (isFinal && text.trim()) {
                   setMessages(prev => [
                     ...prev,
                     { role: 'user', text: text.trim(), id: Date.now().toString() }
                   ]);
-                  setUserText(''); // Clear real-time text after committing to history
+                  setUserText('');
                 }
               },
               onAudioResponse: (audioData, text) => {
-                // Play AI audio and show AI subtitle
-                console.log('Audio response received, text:', text, 'audioData length:', audioData?.length);
                 setAiAudio(audioData);
                 setAiText(text);
                 setIsAiSpeaking(true);
                 blockMicToServerRef.current = !!(audioData && audioData.length > 0);
               },
               onClose: (event) => {
-                console.log('WebSocket closed:', event);
                 setConnectionStatus('disconnected');
                 if (event.code !== 1000) {
-                  console.error('WebSocket closed unexpectedly:', event.code, event.reason);
                   setError('连接已断开，请刷新页面重试');
                 }
               },
-              onError: (errorEvent) => {
-                console.error('WebSocket error event:', errorEvent);
-                const error = errorEvent as ErrorEvent;
-                console.error('WebSocket error details:', {
-                  type: error.type,
-                  target: error.target,
-                  bubbles: error.bubbles,
-                  cancelable: error.cancelable
-                });
+              onError: () => {
                 setError('WebSocket 连接错误，请检查网络后重试');
                 setConnectionStatus('disconnected');
               },
             }
           );
         } catch (error) {
-          console.error('Failed to create WebSocket connection:', error);
           setError('无法建立 WebSocket 连接: ' + (error instanceof Error ? error.message : '未知错误'));
           setConnectionStatus('disconnected');
         }
-      }, 500); // 延迟 500ms 确保页面完全加载
+      }, 500);
     } catch (error) {
-      console.error('Failed to create session:', error);
       const errorMessage = error instanceof Error ? error.message : '创建面试会话失败，请重试';
       setError(errorMessage);
       setConnectionStatus('disconnected');
       alert('创建会话失败：' + errorMessage);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!presetVoiceConfig || autoStartRef.current) {
+      return;
+    }
+    autoStartRef.current = true;
+    handlePhaseConfig({
+      skillId: presetVoiceConfig.skillId,
+      difficulty: presetVoiceConfig.difficulty,
+      techEnabled: presetVoiceConfig.techEnabled,
+      projectEnabled: presetVoiceConfig.projectEnabled,
+      hrEnabled: presetVoiceConfig.hrEnabled,
+      plannedDuration: presetVoiceConfig.plannedDuration,
+      resumeId: presetVoiceConfig.resumeId,
+      llmProvider: presetVoiceConfig.llmProvider,
+    });
+  }, [handlePhaseConfig, presetVoiceConfig]);
 
   const handleAudioData = (audioData: string) => {
     if (blockMicToServerRef.current) {
@@ -251,10 +243,7 @@ export default function VoiceInterviewPage() {
   };
 
   const handleSpeechStart = () => {
-    console.log('[Page] User speaking, interrupt AI');
     blockMicToServerRef.current = false;
-
-    // Immediately stop AI audio
     if (audioPlayerRef.current && isAiSpeaking) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
@@ -262,56 +251,37 @@ export default function VoiceInterviewPage() {
     }
   };
 
-  const handleSpeechEnd = () => {
-    console.log('[Page] User stopped speaking');
-  };
+  const handleSpeechEnd = () => {};
 
   const handlePause = async (type: 'short' | 'long') => {
     if (!sessionId) return;
 
     if (type === 'short') {
-      // Short pause: keep connection, start 5-minute countdown
       setIsRecording(false);
-
       pauseTimeoutRef.current = setTimeout(() => {
-        // Auto-convert to long pause after 5 minutes
         handleLongPause();
       }, 5 * 60 * 1000);
-
     } else {
-      // Long pause: disconnect and save
       await handleLongPause();
     }
   };
 
   const handleLongPause = async () => {
-    // Clear timeout
     if (pauseTimeoutRef.current) {
       clearTimeout(pauseTimeoutRef.current);
       pauseTimeoutRef.current = null;
     }
-
-    // Disconnect WebSocket
     if (wsRef.current) {
       wsRef.current.disconnect();
     }
-
-    // Stop recording
     if (isRecording) {
       setIsRecording(false);
     }
-
-    // Save to backend
-    if (!sessionId) {
-      console.error('No session ID available');
-      return;
-    }
-
+    if (!sessionId) return;
     try {
       await voiceInterviewApi.pauseSession(sessionId);
       navigate('/interviews');
     } catch (error) {
-      console.error('Failed to pause session:', error);
       alert('暂停失败，请重试');
     }
   };
@@ -320,11 +290,9 @@ export default function VoiceInterviewPage() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
-
     if (wsRef.current) {
       wsRef.current.disconnect();
     }
-
     if (sessionId) {
       try {
         await voiceInterviewApi.endSession(sessionId);
@@ -332,7 +300,6 @@ export default function VoiceInterviewPage() {
         console.error('Failed to end session:', error);
       }
     }
-
     navigate('/interviews');
   };
 
@@ -340,34 +307,23 @@ export default function VoiceInterviewPage() {
     navigate('/upload');
   };
 
-  // Validation
-  if (!initialRoleType) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900">
-        <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <p className="text-slate-600 dark:text-slate-300 text-lg">无效的面试角色</p>
-          <button
-            onClick={() => navigate('/')}
-            className="mt-4 px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
-          >
-            返回首页
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-900 text-white overflow-hidden flex flex-col">
-      {/* Phase setup modal */}
-      <PhaseSetupModal
-        isOpen={showPhaseModal}
-        onClose={handleCloseModal}
-        onStart={handlePhaseConfig}
-        roleType={currentRoleType}
-        onRoleTypeChange={handleRoleTypeChange}
-      />
+      {/* Phase setup modal - now using UnifiedInterviewModal */}
+      {!autoStartRef.current && !presetVoiceConfig && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/95">
+          <div className="text-center">
+            <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+            <p className="text-slate-300 text-lg mb-4">未检测到面试配置</p>
+            <button
+              onClick={handleCloseModal}
+              className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+            >
+              返回首页重新开始
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header / Top Bar */}
       <div className="px-6 py-4 flex items-center justify-between bg-slate-900/50 backdrop-blur-md border-b border-white/10 z-10">
@@ -383,7 +339,7 @@ export default function VoiceInterviewPage() {
             <Mic className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">{getRoleLabel(currentRoleType)}</h1>
+            <h1 className="text-lg font-bold tracking-tight">{templateName || effectiveSkillId}</h1>
             <div className="flex items-center gap-2">
               <span className="text-xs px-2 py-0.5 bg-primary-500/20 text-primary-400 rounded-full border border-primary-500/30">
                 {getPhaseLabel(currentPhase)}
@@ -412,10 +368,8 @@ export default function VoiceInterviewPage() {
 
       {/* Main Content Area */}
       <div className="flex-1 relative flex overflow-hidden">
-        {/* Global ambient glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 blur-[120px] rounded-full pointer-events-none" />
 
-        {/* Left: AI Avatar and Live Subtitles (Call Room View) */}
         <div className="flex-1 flex flex-col items-center justify-center p-8 relative z-10">
           {/* AI Avatar Area */}
           <div className="relative mb-16">
@@ -435,7 +389,6 @@ export default function VoiceInterviewPage() {
             >
               <Bot className={`w-24 h-24 md:w-32 md:h-32 ${isAiSpeaking ? 'text-primary-400' : 'text-slate-600'} transition-colors`} strokeWidth={1.5} />
 
-              {/* Speaking Indicator Rings */}
               {isAiSpeaking && (
                 <>
                   <div className="absolute inset-0 rounded-full border-2 border-primary-500/50 animate-ping" />
@@ -444,13 +397,12 @@ export default function VoiceInterviewPage() {
               )}
             </motion.div>
 
-            {/* AI Role Badge */}
             <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 px-5 py-1.5 rounded-full shadow-xl z-20">
               <span className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">Interviewer</span>
             </div>
           </div>
 
-          {/* Active Subtitles (Center Overlay) */}
+          {/* Active Subtitles */}
           <div className="w-full max-w-3xl min-h-[140px] flex flex-col items-center justify-center text-center px-8 py-6 bg-slate-800/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl">
              <AnimatePresence mode="wait">
                {isAiSpeaking || aiText ? (
@@ -507,8 +459,8 @@ export default function VoiceInterviewPage() {
         </div>
       </div>
 
-      {/* Footer Controls (Floating Dock) - 只在面试开始后显示 */}
-      {!showPhaseModal && (
+      {/* Footer Controls */}
+      {(presetVoiceConfig || autoStartRef.current) && connectionStatus !== 'disconnected' && (
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-6 px-10 py-5 bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
             <button
@@ -546,7 +498,6 @@ export default function VoiceInterviewPage() {
             </button>
           </div>
 
-          {/* Subtle status hint */}
           <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-widest uppercase text-slate-500">
              {isRecording ? (
               <span className="text-primary-400 flex items-center gap-2">

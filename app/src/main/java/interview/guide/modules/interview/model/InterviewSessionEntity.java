@@ -26,9 +26,21 @@ public class InterviewSessionEntity {
     @Column(nullable = false, unique = true, length = 36)
     private String sessionId;
     
-    // 关联的简历
+    // 面试主题
+    @Column(length = 64)
+    private String skillId = "java-backend";
+
+    // 难度级别 (junior / mid / senior)
+    @Column(length = 16)
+    private String difficulty = "mid";
+
+    // 简历ID（直接映射FK列，避免LAZY加载触发额外查询）
+    @Column(name = "resume_id", insertable = false, updatable = false)
+    private Long resumeId;
+
+    // 关联的简历（可选，支持无简历通用面试）
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "resume_id", nullable = false)
+    @JoinColumn(name = "resume_id")
     private ResumeEntity resume;
     
     // 问题总数
@@ -118,10 +130,14 @@ public class InterviewSessionEntity {
         this.sessionId = sessionId;
     }
     
+    public Long getResumeId() {
+        return resumeId;
+    }
+
     public ResumeEntity getResume() {
         return resume;
     }
-    
+
     public void setResume(ResumeEntity resume) {
         this.resume = resume;
     }
@@ -244,6 +260,22 @@ public class InterviewSessionEntity {
 
     public void setLlmProvider(String llmProvider) {
         this.llmProvider = llmProvider;
+    }
+
+    public String getSkillId() {
+        return skillId;
+    }
+
+    public void setSkillId(String skillId) {
+        this.skillId = skillId;
+    }
+
+    public String getDifficulty() {
+        return difficulty;
+    }
+
+    public void setDifficulty(String difficulty) {
+        this.difficulty = difficulty;
     }
 
     public void addAnswer(InterviewAnswerEntity answer) {

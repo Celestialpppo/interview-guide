@@ -1,7 +1,9 @@
-import {Link, Outlet, useLocation} from 'react-router-dom';
+import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {Calendar, ChevronRight, Database, FileStack, FileText, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
+import {Calendar, ChevronRight, Database, FileStack, MessageSquare, Mic, Moon, Sparkles, Sun, Upload, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
+import {useState} from 'react';
+import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
 
 interface NavItem {
   id: string;
@@ -9,6 +11,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   description?: string;
+  action?: () => void;
 }
 
 interface NavGroup {
@@ -20,7 +23,69 @@ interface NavGroup {
 export default function Layout() {
   const location = useLocation();
   const currentPath = location.pathname;
-    const {theme, toggleTheme} = useTheme();
+  const {theme, toggleTheme} = useTheme();
+  const navigate = useNavigate();
+  const [interviewModalPreset, setInterviewModalPreset] = useState<{
+    defaultMode: 'text' | 'voice';
+    title: string;
+    subtitle: string;
+    startButtonText: string;
+  } | null>(null);
+
+  const openTextInterviewModal = () => {
+    setInterviewModalPreset({
+      defaultMode: 'text',
+      title: '文字模拟面试',
+      subtitle: '配置文字面试参数，开始逐题作答',
+      startButtonText: '开始文字面试',
+    });
+  };
+
+  const openVoiceInterviewModal = () => {
+    setInterviewModalPreset({
+      defaultMode: 'voice',
+      title: '语音模拟面试',
+      subtitle: '配置语音面试参数，开始实时对话',
+      startButtonText: '开始语音面试',
+    });
+  };
+
+  const handleInterviewStart = (config: UnifiedInterviewConfig) => {
+    setInterviewModalPreset(null);
+    if (config.mode === 'text') {
+      navigate('/interview', {
+        state: {
+          resumeId: config.resumeId,
+          interviewConfig: {
+            skillId: config.skillId,
+            difficulty: config.difficulty,
+            questionCount: config.questionCount,
+            llmProvider: config.llmProvider,
+          },
+        },
+      });
+      return;
+    }
+
+    const params = new URLSearchParams({
+      skillId: config.skillId,
+      difficulty: config.difficulty,
+    });
+    navigate(`/voice-interview?${params.toString()}`, {
+      state: {
+        voiceConfig: {
+          skillId: config.skillId,
+          difficulty: config.difficulty,
+          techEnabled: true,
+          projectEnabled: true,
+          hrEnabled: true,
+          plannedDuration: config.plannedDuration,
+          resumeId: config.resumeId,
+          llmProvider: config.llmProvider,
+        },
+      },
+    });
+  };
 
   // 按业务模块组织的导航项
   const navGroups: NavGroup[] = [
@@ -36,8 +101,22 @@ export default function Layout() {
       id: 'interview',
       title: '模拟面试',
       items: [
-        { id: 'text-interview', path: '/upload', label: '文字面试', icon: FileText, description: '基于简历逐题答题' },
-        { id: 'voice-interview', path: '/voice-interview', label: '语音面试', icon: Mic, description: '实时语音对话' },
+        {
+          id: 'start-text-interview',
+          path: '#text-interview-modal',
+          label: '文字面试',
+          icon: MessageSquare,
+          description: '文字问答练习',
+          action: openTextInterviewModal,
+        },
+        {
+          id: 'start-voice-interview',
+          path: '#voice-interview',
+          label: '语音面试',
+          icon: Mic,
+          description: '实时语音对话',
+          action: openVoiceInterviewModal,
+        },
       ],
     },
     {
@@ -66,6 +145,7 @@ export default function Layout() {
 
   // 判断当前页面是否匹配导航项
   const isActive = (path: string) => {
+    if (path.startsWith('#')) return false;
     if (path === '/upload') {
       return currentPath === '/upload' || currentPath === '/';
     }
@@ -76,60 +156,82 @@ export default function Layout() {
   };
 
   return (
-      <div
-          className="flex min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-800">
       {/* 左侧边栏 */}
-          <aside
-              className="w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-700 fixed h-screen left-0 top-0 z-50 flex flex-col">
+      <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-700 fixed h-screen left-0 top-0 z-50 flex flex-col">
         {/* Logo */}
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
           <Link to="/upload" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/30">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-                <span
-                    className="text-lg font-bold text-slate-800 dark:text-white tracking-tight block">AI Interview</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">智能面试助手</span>
+              <span className="text-lg font-bold text-slate-800 dark:text-white tracking-tight block">AI Interview</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">智能面试助手</span>
             </div>
           </Link>
         </div>
 
-              {/* 主题切换按钮 */}
-              <div className="px-4 pb-2">
-                  <button
-                      onClick={toggleTheme}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                      {theme === 'dark' ? (
-                          <>
-                              <Sun className="w-4 h-4"/>
-                              <span className="text-sm font-medium">浅色模式</span>
-                          </>
-                      ) : (
-                          <>
-                              <Moon className="w-4 h-4"/>
-                              <span className="text-sm font-medium">深色模式</span>
-                          </>
-                      )}
-                  </button>
-              </div>
+        {/* 主题切换按钮 */}
+        <div className="px-4 pb-2">
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4" />
+                <span className="text-sm font-medium">浅色模式</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4" />
+                <span className="text-sm font-medium">深色模式</span>
+              </>
+            )}
+          </button>
+        </div>
 
         {/* 导航菜单 */}
         <nav className="flex-1 p-4 overflow-y-auto">
           <div className="space-y-6">
             {navGroups.map((group) => (
               <div key={group.id}>
-                {/* 分组标题 */}
                 <div className="px-3 mb-2">
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     {group.title}
                   </span>
                 </div>
-                {/* 分组下的导航项 */}
                 <div className="space-y-1">
                   {group.items.map((item) => {
                     const active = isActive(item.path);
+                    const isAction = !!item.action;
+
+                    if (isAction) {
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={item.action}
+                          className="group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200
+                            text-slate-600 dark:text-slate-400
+                            hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-600 dark:hover:text-primary-400"
+                        >
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400
+                            group-hover:bg-primary-100 dark:group-hover:bg-primary-900/50 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                            <item.icon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium block group-hover:font-semibold transition-all">{item.label}</span>
+                            {item.description && (
+                              <span className="text-xs text-slate-400 dark:text-slate-500 truncate block group-hover:text-primary-500/80 dark:group-hover:text-primary-400/60 transition-colors">
+                                {item.description}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    }
+
                     return (
                       <Link
                         key={item.id}
@@ -153,14 +255,12 @@ export default function Layout() {
                             {item.label}
                           </span>
                           {item.description && (
-                              <span className="text-xs text-slate-400 dark:text-slate-500 truncate block">
+                            <span className="text-xs text-slate-400 dark:text-slate-500 truncate block">
                               {item.description}
                             </span>
                           )}
                         </div>
-                        {active && (
-                          <ChevronRight className="w-4 h-4 text-primary-400" />
-                        )}
+                        {active && <ChevronRight className="w-4 h-4 text-primary-400" />}
                       </Link>
                     );
                   })}
@@ -171,11 +271,10 @@ export default function Layout() {
         </nav>
 
         {/* 底部信息 */}
-              <div className="p-4 border-t border-slate-100 dark:border-slate-700">
-                  <div
-                      className="px-3 py-2 bg-gradient-to-r from-primary-50 to-indigo-50 dark:from-primary-900/30 dark:to-slate-800 rounded-xl">
-                      <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">AI 面试助手 v1.0</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Powered by AI</p>
+        <div className="p-4 border-t border-slate-100 dark:border-slate-700">
+          <div className="px-3 py-2 bg-gradient-to-r from-primary-50 to-indigo-50 dark:from-primary-900/30 dark:to-slate-800 rounded-xl">
+            <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">AI 面试助手 v1.0</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Powered by AI</p>
           </div>
         </div>
       </aside>
@@ -192,6 +291,18 @@ export default function Layout() {
           <Outlet />
         </motion.div>
       </main>
+
+      {/* 统一面试弹窗 */}
+      <UnifiedInterviewModal
+        isOpen={interviewModalPreset !== null}
+        onClose={() => setInterviewModalPreset(null)}
+        onStart={handleInterviewStart}
+        defaultMode={interviewModalPreset?.defaultMode || 'text'}
+        hideModeSwitch
+        title={interviewModalPreset?.title || '开始模拟面试'}
+        subtitle={interviewModalPreset?.subtitle || '选择面试模式和主题，快速开始'}
+        startButtonText={interviewModalPreset?.startButtonText || '开始面试'}
+      />
     </div>
   );
 }

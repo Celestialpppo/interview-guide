@@ -4,7 +4,6 @@ import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.modules.resume.model.ResumeEntity;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
-import interview.guide.modules.voiceinterview.service.VoiceInterviewPromptService.RolePrompt;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
@@ -38,7 +37,7 @@ public class DashscopeLlmService {
             }
 
             // Generate system prompt dynamically with resume context
-            String systemPrompt = promptService.generateSystemPromptWithContext(session.getRoleType(), resumeText);
+            String systemPrompt = promptService.generateSystemPromptWithContext(session.getSkillId(), resumeText);
 
             // Build conversation context
             StringBuilder promptBuilder = new StringBuilder();

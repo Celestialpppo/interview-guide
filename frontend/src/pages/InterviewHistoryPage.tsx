@@ -1,11 +1,13 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
-import {historyApi, InterviewItem} from '../api/history';
+import {historyApi} from '../api/history';
+import {interviewApi, type TextSessionMeta} from '../api/interview';
 import {voiceInterviewApi, SessionMeta} from '../api/voiceInterview';
 import {formatDate} from '../utils/date';
 import {getScoreProgressColor} from '../utils/score';
-import {getRoleLabel} from '../utils/voiceInterview';
+import {skillApi, type SkillDTO} from '../api/skill';
+import {getTemplateName} from '../utils/voiceInterview';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import {
   AlertCircle,
@@ -147,6 +149,17 @@ interface InterviewHistoryPageProps {
   onViewInterview: (sessionId: string, resumeId?: number) => void;
 }
 
+/** Shallow comparison for polling change-detection */
+function itemsEqual(a: UnifiedInterviewItem[], b: UnifiedInterviewItem[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const ai = a[i], bi = b[i];
+    if (ai.id !== bi.id || ai.status !== bi.status ||
+        ai.evaluateStatus !== bi.evaluateStatus || ai.overallScore !== bi.overallScore) return false;
+  }
+  return true;
+}
+
 export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview }: InterviewHistoryPageProps) {
   const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedInterviewItem[]>([]);
@@ -158,29 +171,51 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview 
   const [deleteItem, setDeleteItem] = useState<UnifiedInterviewItem | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const pollingRef = useRef<number | null>(null);
+  const skillsRef = useRef<SkillDTO[]>([]);
+  const skillsLoadedRef = useRef(false);
 
   const loadAll = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
 
     try {
-      // Load both data sources in parallel
+      // Only fetch skills on first load; reuse cached ref on polling
+      if (!skillsLoadedRef.current) {
+        skillsRef.current = await skillApi.listSkills().catch(() => [] as SkillDTO[]);
+        skillsLoadedRef.current = true;
+      }
+      const loadedSkills = skillsRef.current;
       const [textInterviews, voiceSessions] = await Promise.all([
-        loadTextInterviews(),
+        loadTextInterviews(loadedSkills),
         loadVoiceInterviews(),
       ]);
 
-      const all = [...textInterviews, ...voiceSessions];
+      const voiceWithNames = voiceSessions.map(item => {
+        const skillName = getTemplateName(item.title, loadedSkills);
+        return skillName !== item.title ? { ...item, title: skillName } : item;
+      });
+
+      const all = [...textInterviews, ...voiceWithNames];
       all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      setItems(all);
+      setItems(prev => {
+        if (isPolling && itemsEqual(prev, all)) return prev;
+        return all;
+      });
 
       // Compute stats
       const evaluated = all.filter(i => isEvaluateCompleted(i));
       const totalScore = evaluated.reduce((sum, i) => sum + (i.overallScore || 0), 0);
-      setStats({
+      const newStats = {
         totalCount: all.length,
         completedCount: evaluated.length,
         averageScore: evaluated.length > 0 ? Math.round(totalScore / evaluated.length) : 0,
+      };
+      setStats(prev => {
+        if (isPolling && prev &&
+            prev.totalCount === newStats.totalCount &&
+            prev.completedCount === newStats.completedCount &&
+            prev.averageScore === newStats.averageScore) return prev;
+        return newStats;
       });
     } catch (err) {
       console.error('加载面试记录失败', err);
@@ -189,33 +224,26 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview 
     }
   }, []);
 
-  // Load text interviews from history API
-  async function loadTextInterviews(): Promise<UnifiedInterviewItem[]> {
-    const resumes = await historyApi.getResumes();
-    const details = await Promise.all(resumes.map(r => historyApi.getResumeDetail(r.id)));
-    const result: UnifiedInterviewItem[] = [];
-
-    resumes.forEach((resume, i) => {
-      const detail = details[i];
-      if (detail.interviews && detail.interviews.length > 0) {
-        detail.interviews.forEach((interview: InterviewItem) => {
-          result.push({
-            id: interview.sessionId,
-            type: 'text',
-            title: resume.filename,
-            sessionId: interview.sessionId,
-            status: interview.status,
-            evaluateStatus: interview.evaluateStatus,
-            evaluateError: interview.evaluateError,
-            overallScore: interview.overallScore,
-            totalQuestions: interview.totalQuestions,
-            createdAt: interview.createdAt,
-            resumeId: resume.id,
-          });
-        });
-      }
-    });
-    return result;
+  // Load text interviews from dedicated API
+  async function loadTextInterviews(skills: SkillDTO[]): Promise<UnifiedInterviewItem[]> {
+    try {
+      const sessions = await interviewApi.listSessions();
+      return sessions.map((session: TextSessionMeta) => ({
+        id: session.sessionId,
+        type: 'text' as const,
+        title: getTemplateName(session.skillId, skills),
+        sessionId: session.sessionId,
+        status: session.status,
+        evaluateStatus: session.evaluateStatus ?? undefined,
+        evaluateError: session.evaluateError ?? undefined,
+        overallScore: session.overallScore,
+        totalQuestions: session.totalQuestions,
+        createdAt: session.createdAt,
+        resumeId: session.resumeId ?? undefined,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   // Load voice interviews from voice API
@@ -225,7 +253,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview 
       return sessions.map((session: SessionMeta) => ({
         id: `voice-${session.sessionId}`,
         type: 'voice' as const,
-        title: getRoleLabel(session.roleType),
+        title: session.roleType,
         sessionId: String(session.sessionId),
         status: session.status,
         evaluateStatus: session.evaluateStatus,

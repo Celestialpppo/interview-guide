@@ -1,0 +1,15 @@
+name: Java 后端开发
+description: 适合 Java 后端工程师面试，涵盖 MySQL、Redis、并发、Spring 等核心领域
+display:
+  icon: ☕
+  gradient: from-blue-500 to-indigo-500
+  iconBg: bg-blue-100 dark:bg-blue-900/30
+  iconColor: text-blue-600 dark:text-blue-400
+categories:
+  - { key: MYSQL, label: MySQL, priority: CORE }
+  - { key: REDIS, label: Redis, priority: CORE }
+  - { key: JAVA_CONCURRENT, label: Java 并发, priority: CORE }
+  - { key: SPRING, label: Spring, priority: NORMAL }
+  - { key: JAVA_BASIC, label: Java 基础, priority: NORMAL }
+  - { key: JAVA_COLLECTION, label: Java 集合, priority: NORMAL }
+  - { key: PROJECT, label: 项目经历, priority: ALWAYS_ONE }

@@ -3,7 +3,9 @@ import { request } from './request';
 // ========== 类型定义 ==========
 
 export interface CreateSessionRequest {
-  roleType: 'ali-p8' | 'byteance-algo' | 'tencent-backend';
+  roleType?: string;
+  skillId: string;
+  difficulty?: string;
   customJdText?: string;
   resumeId?: number;
   introEnabled?: boolean;

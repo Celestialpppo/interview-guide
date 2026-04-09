@@ -1,5 +1,6 @@
 package interview.guide.modules.voiceinterview.service;
 
+import interview.guide.common.constant.CommonConstants.InterviewDefaults;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
@@ -61,9 +62,13 @@ public class VoiceInterviewService {
      */
     @Transactional
     public SessionResponseDTO createSession(CreateSessionRequest request) {
+        String effectiveSkillId = request.getSkillId() != null ? request.getSkillId() : InterviewDefaults.SKILL_ID;
+
         VoiceInterviewSessionEntity session = VoiceInterviewSessionEntity.builder()
                 .userId(DEFAULT_USER_ID)
-                .roleType(request.getRoleType())
+                .roleType(effectiveSkillId)
+                .skillId(effectiveSkillId)
+                .difficulty(request.getDifficulty() != null ? request.getDifficulty() : InterviewDefaults.DIFFICULTY)
                 .customJdText(request.getCustomJdText())
                 .resumeId(request.getResumeId())
                 .introEnabled(request.getIntroEnabled())
@@ -78,8 +83,8 @@ public class VoiceInterviewService {
         VoiceInterviewSessionEntity saved = sessionRepository.save(session);
         cacheSession(saved);
 
-        log.info("Created voice interview session: {} for role: {}, phase: {}",
-                saved.getId(), saved.getRoleType(), saved.getCurrentPhase());
+        log.info("Created voice interview session: {} with template: {}, phase: {}",
+                saved.getId(), effectiveSkillId, saved.getCurrentPhase());
 
         return buildSessionResponse(saved);
     }

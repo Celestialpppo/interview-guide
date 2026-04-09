@@ -12,29 +12,21 @@ export interface InterviewSession {
 export interface InterviewQuestion {
   questionIndex: number;
   question: string;
-  type: QuestionType;
+  type: string;
   category: string;
   userAnswer: string | null;
   score: number | null;
   feedback: string | null;
 }
 
-export type QuestionType = 
-  | 'PROJECT' 
-  | 'JAVA_BASIC' 
-  | 'JAVA_COLLECTION' 
-  | 'JAVA_CONCURRENT' 
-  | 'MYSQL' 
-  | 'REDIS' 
-  | 'SPRING' 
-  | 'SPRING_BOOT';
-
 export interface CreateInterviewRequest {
   resumeText: string;
   questionCount: number;
   resumeId?: number;
-  forceCreate?: boolean;  // 是否强制创建新会话（忽略未完成的会话）
+  forceCreate?: boolean;
   llmProvider?: string;
+  skillId: string;
+  difficulty?: string;
 }
 
 export interface SubmitAnswerRequest {

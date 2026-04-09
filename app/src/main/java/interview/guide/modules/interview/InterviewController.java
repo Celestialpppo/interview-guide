@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,6 +33,17 @@ public class InterviewController {
     private final InterviewHistoryService historyService;
     private final InterviewPersistenceService persistenceService;
     
+    /**
+     * 列出所有面试会话（用于面试记录页）
+     */
+    @GetMapping("/api/interview/sessions")
+    public Result<List<SessionListItemDTO>> listSessions() {
+        List<SessionListItemDTO> items = persistenceService.findAll().stream()
+            .map(SessionListItemDTO::from)
+            .toList();
+        return Result.success(items);
+    }
+
     /**
      * 创建面试会话
      */

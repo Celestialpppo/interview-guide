@@ -126,7 +126,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         String provider = session.getLlmProvider();
         org.springframework.ai.chat.client.ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
-        String resumeText = session.getResume().getResumeText();
+        String resumeText = session.getResume() != null ? session.getResume().getResumeText() : "";
         InterviewReportDTO report = evaluationService.evaluateInterview(chatClient, sessionId, resumeText, questions);
         persistenceService.saveReport(sessionId, report);
     }

@@ -28,6 +28,14 @@ public class VoiceInterviewSessionEntity {
     @Column(name = "role_type", nullable = false)
     private String roleType;
 
+    @Column(name = "skill_id", length = 64)
+    @Builder.Default
+    private String skillId = "java-backend";
+
+    @Column(name = "difficulty", length = 16)
+    @Builder.Default
+    private String difficulty = "mid";
+
     @Column(name = "custom_jd_text", columnDefinition = "TEXT")
     private String customJdText;
 

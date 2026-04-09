@@ -1,8 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import { useEffect, useState, Suspense, lazy } from 'react';
-import { historyApi } from './api/history';
+import { historyApi, type InterviewDetail } from './api/history';
 import type { UploadKnowledgeBaseResponse } from './api/knowledgebase';
+import type { Difficulty } from './components/UnifiedInterviewModal';
+import { Loader2 } from 'lucide-react';
 
 // Lazy load components
 const UploadPage = lazy(() => import('./pages/UploadPage'));
@@ -16,6 +18,7 @@ const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePa
 const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewSchedulePage = lazy(() => import('./pages/InterviewSchedulePage'));
+const InterviewDetailPanel = lazy(() => import('./components/InterviewDetailPanel'));
 
 // Loading component
 const Loading = () => (
@@ -60,8 +63,8 @@ function ResumeDetailWrapper() {
     navigate('/history');
   };
 
-  const handleStartInterview = (resumeText: string, resumeId: number) => {
-    navigate(`/interview/${resumeId}`, { state: { resumeText } });
+  const handleStartInterview = (_resumeText: string, resumeId: number) => {
+    navigate('/interview', { state: { resumeId, interviewConfig: { skillId: 'java-backend', difficulty: 'mid' } } });
   };
 
   return (
@@ -73,23 +76,36 @@ function ResumeDetailWrapper() {
   );
 }
 
+interface InterviewEntryState {
+  resumeId?: number;
+  resumeText?: string;
+  interviewConfig?: {
+    skillId?: string;
+    difficulty?: Difficulty;
+    questionCount?: number;
+    llmProvider?: string;
+  };
+}
+
 // 模拟面试包装器
 function InterviewWrapper() {
   const { resumeId } = useParams<{ resumeId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const entryState = (location.state as InterviewEntryState | undefined) ?? {};
   const [resumeText, setResumeText] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const effectiveResumeId = resumeId ? parseInt(resumeId, 10) : entryState.resumeId;
 
   useEffect(() => {
     // 优先从location state获取resumeText
-    const stateText = (location.state as { resumeText?: string })?.resumeText;
+    const stateText = entryState.resumeText;
     if (stateText) {
       setResumeText(stateText);
       setLoading(false);
-    } else if (resumeId) {
+    } else if (effectiveResumeId) {
       // 如果没有，从API获取简历详情
-      historyApi.getResumeDetail(parseInt(resumeId, 10))
+      historyApi.getResumeDetail(effectiveResumeId)
         .then(resume => {
           setResumeText(resume.resumeText);
           setLoading(false);
@@ -101,15 +117,14 @@ function InterviewWrapper() {
     } else {
       setLoading(false);
     }
-  }, [resumeId, location.state]);
-
-  if (!resumeId) {
-    return <Navigate to="/history" replace />;
-  }
+  }, [effectiveResumeId, entryState.resumeText]);
 
   const handleBack = () => {
-    // 尝试返回详情页，如果失败则返回历史列表
-    navigate(`/history/${resumeId}`, { replace: false });
+    if (effectiveResumeId) {
+      navigate(`/history/${effectiveResumeId}`, { replace: false });
+      return;
+    }
+    navigate('/upload', { replace: false });
   };
 
   const handleInterviewComplete = () => {
@@ -131,7 +146,8 @@ function InterviewWrapper() {
   return (
     <Interview
       resumeText={resumeText}
-      resumeId={parseInt(resumeId, 10)}
+      resumeId={effectiveResumeId}
+      initialConfig={entryState.interviewConfig}
       onBack={handleBack}
       onInterviewComplete={handleInterviewComplete}
     />
@@ -158,6 +174,12 @@ function App() {
 
             {/* 面试记录列表 */}
             <Route path="interviews" element={<InterviewHistoryWrapper />} />
+
+            {/* 面试详情报告 */}
+            <Route path="interviews/:sessionId" element={<InterviewDetailPageWrapper />} />
+
+            {/* 模拟面试（通用入口） */}
+            <Route path="interview" element={<InterviewWrapper />} />
 
             {/* 模拟面试 */}
             <Route path="interview/:resumeId" element={<InterviewWrapper />} />
@@ -194,29 +216,80 @@ function InterviewHistoryWrapper() {
     navigate('/upload');
   };
 
-  const handleViewInterview = async (sessionId: string, resumeId?: number) => {
-    if (resumeId) {
-      // 如果有简历ID，跳转到简历详情页的面试详情
-      navigate(`/history/${resumeId}`, {
-        state: { viewInterview: sessionId }
-      });
-    } else {
-      // 否则尝试从面试详情中获取简历ID
-      try {
-        await historyApi.getInterviewDetail(sessionId);
-        // 面试详情中没有简历ID，需要从其他地方获取
-        // 暂时跳转到历史记录列表
-        navigate('/history');
-      } catch {
-        navigate('/history');
-      }
-    }
+  const handleViewInterview = async (sessionId: string, _resumeId?: number) => {
+    navigate(`/interviews/${sessionId}`);
   };
 
   return <InterviewHistoryPage onBack={handleBack} onViewInterview={handleViewInterview} />;
 }
 
-// 知识库管理页面包装器
+// 面试详情报告页面包装器
+function InterviewDetailPageWrapper() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
+  const [interview, setInterview] = useState<InterviewDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!sessionId) {
+      navigate('/interviews');
+      return;
+    }
+    historyApi.getInterviewDetail(sessionId)
+      .then(detail => {
+        setInterview(detail);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError('加载面试详情失败');
+        setLoading(false);
+      });
+  }, [sessionId, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !interview) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">{error || '面试记录不存在'}</p>
+          <button
+            onClick={() => navigate('/interviews')}
+            className="px-5 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+          >
+            返回面试记录
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => navigate('/interviews')}
+          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+          面试详情 #{sessionId!.slice(-8)}
+        </h1>
+      </div>
+      <InterviewDetailPanel interview={interview} />
+    </div>
+  );
+}
 function KnowledgeBaseManagePageWrapper() {
   const navigate = useNavigate();
 
