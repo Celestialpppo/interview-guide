@@ -43,7 +43,7 @@ interface UnifiedInterviewModalProps {
   startButtonText?: string;
 }
 
-const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: string }[] = [
+export const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: string }[] = [
   { value: 'junior', label: '校招', desc: '0-1 年' },
   { value: 'mid', label: '中级', desc: '1-3 年' },
   { value: 'senior', label: '高级', desc: '3 年+' },
@@ -217,7 +217,7 @@ export default function UnifiedInterviewModal({
                             className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all duration-200 text-left
                               ${selected
                                 ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                                : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                           >
                             <Icon className={`w-5 h-5 flex-shrink-0 ${selected ? 'text-primary-500' : 'text-slate-400'}`} />
@@ -257,7 +257,7 @@ export default function UnifiedInterviewModal({
                             className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all duration-200 text-left
                               ${selected
                                 ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                                : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                               }`}
                           >
                             <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${
@@ -371,7 +371,7 @@ export default function UnifiedInterviewModal({
                           className={`py-2.5 px-3 rounded-xl border-2 transition-all duration-200 text-center
                             ${selected
                               ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                              : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                             }`}
                         >
                           <p className={`text-sm font-semibold ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -452,7 +452,7 @@ export default function UnifiedInterviewModal({
 
                       {/* 语音面试 - 时长 */}
                       {mode === 'voice' && (
-                        <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-150 dark:border-slate-700">
+                        <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                           <div className="flex items-center justify-between mb-3">
                             <p className="font-semibold text-sm text-slate-900 dark:text-white">计划面试时长</p>
                             <div className="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">

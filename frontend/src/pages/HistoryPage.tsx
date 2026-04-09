@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
 import {AlertCircle, CheckCircle, Clock, FileStack, RefreshCw, Sparkles, Upload} from 'lucide-react';
@@ -47,7 +47,6 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; filename: string } | null>(null);
-  const pollingRef = useRef<number | null>(null);
 
   const loadResumes = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
@@ -69,23 +68,13 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
   }, [loadResumes]);
 
   // 轮询：有分析中的简历时启动 3s 轮询
+  const hasAnalyzing = resumes.some(r => isAnalyzing(r.analyzeStatus));
+
   useEffect(() => {
-    const hasAnalyzing = resumes.some(r => isAnalyzing(r.analyzeStatus));
-
-    if (hasAnalyzing && !pollingRef.current) {
-      pollingRef.current = window.setInterval(() => loadResumes(true), 3000);
-    } else if (!hasAnalyzing && pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [resumes, loadResumes]);
+    if (!hasAnalyzing) return;
+    const id = window.setInterval(() => loadResumes(true), 3000);
+    return () => clearInterval(id);
+  }, [hasAnalyzing, loadResumes]);
 
   const handleDeleteClick = (id: number, filename: string, e: React.MouseEvent) => {
     e.stopPropagation();

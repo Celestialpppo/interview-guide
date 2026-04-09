@@ -16,6 +16,7 @@ interface Message {
 interface InterviewProps {
   resumeText: string;
   resumeId?: number;
+  sessionIdToResume?: string;
   initialConfig?: {
     questionCount?: number;
     llmProvider?: string;
@@ -29,6 +30,7 @@ interface InterviewProps {
 export default function Interview({
   resumeText,
   resumeId,
+  sessionIdToResume,
   initialConfig,
   onBack,
   onInterviewComplete,
@@ -48,11 +50,15 @@ export default function Interview({
   const skillId = initialConfig?.skillId ?? 'java-backend';
   const difficulty = initialConfig?.difficulty ?? 'mid';
 
-  // 自动开始面试（检查未完成会话 → 恢复或新建）
+  // 自动开始面试（恢复已有会话 或 创建新会话）
   useEffect(() => {
     if (!startedRef.current) {
       startedRef.current = true;
-      startInterview();
+      if (sessionIdToResume) {
+        resumeExistingSession(sessionIdToResume);
+      } else {
+        startInterview();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -72,23 +78,62 @@ export default function Interview({
         difficulty,
       });
 
-      setSession(newSession);
-
-      if (newSession.questions.length > 0) {
-        const firstQuestion = newSession.questions[0];
-        setCurrentQuestion(firstQuestion);
-        setMessages([{
-          type: 'interviewer',
-          content: firstQuestion.question,
-          category: firstQuestion.category,
-          questionIndex: 0
-        }]);
-      }
+      initSession(newSession);
     } catch (err) {
       setError('创建面试失败，请重试');
       console.error(err);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const resumeExistingSession = async (sessionId: string) => {
+    setIsCreating(true);
+    setError('');
+
+    try {
+      const existingSession = await interviewApi.getSession(sessionId);
+      initSession(existingSession);
+
+      // 恢复已填写的答案
+      const currentQ = existingSession.questions[existingSession.currentQuestionIndex];
+      if (currentQ?.userAnswer) {
+        setAnswer(currentQ.userAnswer);
+      }
+    } catch (err) {
+      setError('恢复面试失败，请重试');
+      console.error(err);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const initSession = (s: InterviewSession) => {
+    setSession(s);
+
+    if (s.questions.length > 0) {
+      const idx = Math.min(s.currentQuestionIndex, s.questions.length - 1);
+      const currentQ = s.questions[idx];
+      setCurrentQuestion(currentQ);
+
+      // 重建消息历史
+      const restoredMessages: Message[] = [];
+      for (let i = 0; i <= idx; i++) {
+        const q = s.questions[i];
+        restoredMessages.push({
+          type: 'interviewer',
+          content: q.question,
+          category: q.category,
+          questionIndex: i
+        });
+        if (q.userAnswer) {
+          restoredMessages.push({
+            type: 'user',
+            content: q.userAnswer
+          });
+        }
+      }
+      setMessages(restoredMessages);
     }
   };
 

@@ -81,6 +81,7 @@ function ResumeDetailWrapper() {
 interface InterviewEntryState {
   resumeId?: number;
   resumeText?: string;
+  sessionIdToResume?: string;
   interviewConfig?: {
     skillId?: string;
     difficulty?: Difficulty;
@@ -149,6 +150,7 @@ function InterviewWrapper() {
     <Interview
       resumeText={resumeText}
       resumeId={effectiveResumeId}
+      sessionIdToResume={entryState.sessionIdToResume}
       initialConfig={entryState.interviewConfig}
       onBack={handleBack}
       onInterviewComplete={handleInterviewComplete}
@@ -230,7 +232,11 @@ function InterviewHistoryWrapper() {
     openInterviewModalWithResume(resumeId);
   };
 
-  return <InterviewHistoryPage onBack={handleBack} onViewInterview={handleViewInterview} onRestartInterview={handleRestartInterview} />;
+  const handleContinueInterview = (sessionId: string) => {
+    navigate('/interview', { state: { sessionIdToResume: sessionId } });
+  };
+
+  return <InterviewHistoryPage onBack={handleBack} onViewInterview={handleViewInterview} onRestartInterview={handleRestartInterview} onContinueInterview={handleContinueInterview} />;
 }
 
 // 面试详情报告页面包装器

@@ -11,16 +11,8 @@ import { interviewApi, type TextSessionMeta } from '../api/interview';
 import { voiceInterviewApi, type SessionMeta } from '../api/voiceInterview';
 import { getSkillIcon } from '../utils/skillIcons';
 import { getTemplateName } from '../utils/voiceInterview';
-import { getScoreProgressColor } from '../utils/score';
-import type { Difficulty } from '../components/UnifiedInterviewModal';
-
-type InterviewMode = 'text' | 'voice';
-
-const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: string }[] = [
-  { value: 'junior', label: '校招', desc: '0-1 年' },
-  { value: 'mid', label: '中级', desc: '1-3 年' },
-  { value: 'senior', label: '高级', desc: '3 年+' },
-];
+import { getScoreTextColor } from '../utils/score';
+import { type Difficulty, type InterviewMode, DIFFICULTY_OPTIONS } from '../components/UnifiedInterviewModal';
 
 // 统一的面试记录项
 interface RecentInterviewItem {
@@ -215,7 +207,7 @@ export default function InterviewHubPage() {
                     className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 text-left
                       ${selected
                         ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                        : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                       }`}
                   >
                     <Icon className={`w-6 h-6 flex-shrink-0 ${selected ? 'text-primary-500' : 'text-slate-400'}`} />
@@ -254,7 +246,7 @@ export default function InterviewHubPage() {
                       className={`flex items-center gap-2.5 p-3 rounded-xl border-2 transition-all duration-200 text-left
                         ${selected
                           ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                          : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                         }`}
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${
@@ -363,7 +355,7 @@ export default function InterviewHubPage() {
                     className={`py-3 px-4 rounded-xl border-2 transition-all duration-200 text-center
                       ${selected
                         ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                        : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
                       }`}
                   >
                     <p className={`text-sm font-semibold ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -442,7 +434,7 @@ export default function InterviewHubPage() {
 
                 {/* 语音面试 - 时长 */}
                 {mode === 'voice' && (
-                  <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-150 dark:border-slate-700">
+                  <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-3">
                       <p className="font-semibold text-sm text-slate-900 dark:text-white">计划面试时长</p>
                       <div className="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
@@ -557,7 +549,7 @@ export default function InterviewHubPage() {
                       )}
                       {isCompleted && item.overallScore !== null && (
                         <span className="text-xs text-slate-600 dark:text-slate-300">
-                          得分 <span className={`font-bold ${getScoreProgressColor(item.overallScore).replace('bg-', 'text-')}`}>{item.overallScore}</span>
+                          得分 <span className={`font-bold ${getScoreTextColor(item.overallScore!)}`}>{item.overallScore}</span>
                         </span>
                       )}
                     </div>
