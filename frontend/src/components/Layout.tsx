@@ -105,7 +105,16 @@ export default function Layout() {
   const isActive = (path: string) => {
     if (path.startsWith('#')) return false;
     if (path === '/history') {
-      return currentPath === '/history' || currentPath === '/' || currentPath.startsWith('/history/');
+      return currentPath === '/history'
+        || currentPath === '/'
+        || currentPath.startsWith('/history/')
+        || currentPath === '/upload';
+    }
+    if (path === '/interview-hub') {
+      return currentPath === '/interview-hub'
+        || currentPath === '/interview'
+        || currentPath.startsWith('/interview/')
+        || currentPath.startsWith('/voice-interview');
     }
     if (path === '/knowledgebase') {
       return currentPath === '/knowledgebase' || currentPath === '/knowledgebase/upload';

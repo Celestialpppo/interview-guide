@@ -6,6 +6,7 @@ import {historyApi, ResumeListItem} from '../api/history';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import {formatDateOnly} from '../utils/date';
 import {getScoreProgressColor} from '../utils/score';
+import { ROUTES } from '../constants/routes';
 
 interface HistoryListProps {
   onSelectResume: (id: number) => void;
@@ -118,7 +119,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => navigate('/upload')}
+            onClick={() => navigate(ROUTES.resumeUpload)}
             className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
             <Upload className="w-4 h-4" />
