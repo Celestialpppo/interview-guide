@@ -58,10 +58,10 @@ export default function RealtimeSubtitle({
   }, [messages, userText, displayedAiText]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-900/40 backdrop-blur-md overflow-hidden">
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-slate-950/30">
-        <h4 className="text-sm font-medium text-slate-300 tracking-wide">对话实录</h4>
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/80">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 tracking-wide">对话实录</h4>
         <div className="flex items-center gap-3">
           {isAiSpeaking && (
             <div className="flex items-center gap-1.5">
@@ -95,8 +95,8 @@ export default function RealtimeSubtitle({
               <div
                 className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-primary-600 text-white rounded-tr-sm shadow-md shadow-primary-900/20'
-                    : 'bg-slate-800 text-slate-200 rounded-tl-sm shadow-md shadow-black/20'
+                    ? 'bg-primary-500 text-white rounded-tr-sm shadow-md shadow-primary-500/20'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-sm'
                 }`}
               >
                 {msg.text}
@@ -112,7 +112,7 @@ export default function RealtimeSubtitle({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               className="flex justify-start"
             >
-              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tl-sm bg-slate-800 border border-primary-500/30 text-slate-200 text-sm leading-relaxed shadow-lg shadow-primary-900/10">
+              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tl-sm bg-slate-100 dark:bg-slate-700 border border-primary-300/60 dark:border-primary-700/40 text-slate-700 dark:text-slate-200 text-sm leading-relaxed">
                 {displayedAiText || aiText}
                 {isTyping && (
                   <motion.span
@@ -133,7 +133,7 @@ export default function RealtimeSubtitle({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               className="flex justify-end"
             >
-              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tr-sm bg-primary-600/80 backdrop-blur-sm border border-primary-500/50 text-white text-sm italic leading-relaxed">
+              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tr-sm bg-primary-500/90 border border-primary-400/70 text-white text-sm italic leading-relaxed">
                 {userText}
                 <span className="ml-1 animate-pulse">...</span>
               </div>
@@ -145,10 +145,10 @@ export default function RealtimeSubtitle({
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="h-full flex flex-col items-center justify-center text-slate-500 py-12"
+              className="h-full flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-12"
             >
-              <div className="w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center mb-4 border border-white/5">
-                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-600">
+                <svg className="w-5 h-5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
