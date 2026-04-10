@@ -101,6 +101,8 @@ spring:
 app:
   ai:
     default-provider: dashscope
+    agent-utils:
+      skills-root: ${APP_AI_AGENT_UTILS_SKILLS_ROOT:classpath:skills}
     providers:
       dashscope:
         base-url: https://dashscope.aliyuncs.com/compatible-mode

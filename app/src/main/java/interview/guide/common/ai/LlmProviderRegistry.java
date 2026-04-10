@@ -10,7 +10,9 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.retry.RetryUtils;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -31,14 +33,17 @@ public class LlmProviderRegistry {
 
     private final ToolCallingManager toolCallingManager;
     private final ObservationRegistry observationRegistry;
+    private final ToolCallback interviewSkillsToolCallback;
 
     public LlmProviderRegistry(
             LlmProviderProperties properties,
             @Autowired(required = false) ToolCallingManager toolCallingManager,
-            @Autowired(required = false) ObservationRegistry observationRegistry) {
+            @Autowired(required = false) ObservationRegistry observationRegistry,
+            @Autowired(required = false) @Qualifier("interviewSkillsToolCallback") ToolCallback interviewSkillsToolCallback) {
         this.properties = properties;
         this.toolCallingManager = toolCallingManager;
         this.observationRegistry = observationRegistry;
+        this.interviewSkillsToolCallback = interviewSkillsToolCallback;
     }
 
     /**
@@ -108,7 +113,7 @@ public class LlmProviderRegistry {
                 .temperature(0.2)
                 .build();
         
-        // Instantiate OpenAiChatModel with all required parameters for Spring AI 2.0.0-M1
+        // Instantiate OpenAiChatModel with all required parameters for Spring AI 2.0.0-M4
         OpenAiChatModel chatModel = new OpenAiChatModel(
                 openAiApi,
                 options,
@@ -119,7 +124,12 @@ public class LlmProviderRegistry {
 
         log.info("[LlmProviderRegistry] Successfully created ChatClient for {}", providerId);
 
+        ChatClient.Builder builder = ChatClient.builder(chatModel);
+        if (interviewSkillsToolCallback != null) {
+            builder.defaultToolCallbacks(interviewSkillsToolCallback);
+        }
+
         // Build and return the ChatClient
-        return ChatClient.builder(chatModel).build();
+        return builder.build();
     }
 }

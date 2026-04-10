@@ -6,8 +6,8 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.skill.InterviewSkillService;
-import interview.guide.modules.interview.skill.InterviewSkillService.CategoryDTO;
 import interview.guide.modules.interview.skill.InterviewSkillService.SkillDTO;
+import interview.guide.modules.interview.skill.InterviewSkillService.SkillCategoryDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -104,10 +104,13 @@ public class InterviewQuestionService {
             variables.put("followUpCount", followUpCount);
             variables.put("difficultyDescription", difficultyDesc);
             variables.put("skillName", skill.name());
+            variables.put("skillToolCommand", skill.id());
             variables.put("skillDescription", skill.description() != null ? skill.description() : "");
             variables.put("allocationTable", allocationTable);
             variables.put("resumeSection", buildResumeSection(resumeText));
             variables.put("historicalSection", buildHistoricalSection(historicalQuestions));
+            variables.put("referenceSection", skillService.buildReferenceSection(skill, allocation));
+            variables.put("personaSection", buildPersonaSection(skill.persona()));
 
             String systemPrompt = skillSystemPromptTemplate.render();
             String userPrompt = skillUserPromptTemplate.render(variables);
@@ -153,6 +156,13 @@ public class InterviewQuestionService {
         return "---历史提问开始---\n" + String.join("\n", historicalQuestions) + "\n---历史提问结束---";
     }
 
+    private String buildPersonaSection(String persona) {
+        if (persona == null || persona.isBlank()) {
+            return "使用专业、直接、可执行的技术面试官风格。";
+        }
+        return persona;
+    }
+
     private List<InterviewQuestionDTO> convertToQuestions(QuestionListDTO dto) {
         List<InterviewQuestionDTO> questions = new ArrayList<>();
         int index = 0;
@@ -187,14 +197,14 @@ public class InterviewQuestionService {
      * 2. 如果 Skill 也拿不到，用通用行为/软技能题
      */
     private List<InterviewQuestionDTO> generateFallbackQuestions(SkillDTO skill, int count) {
-        List<CategoryDTO> categories = skill != null ? skill.categories() : List.of();
+        List<SkillCategoryDTO> categories = skill != null ? skill.categories() : List.of();
         List<InterviewQuestionDTO> questions = new ArrayList<>();
         int index = 0;
 
         if (!categories.isEmpty()) {
             // 第一层：按 Skill categories 生成通用占位题
             int generated = 0;
-            for (CategoryDTO cat : categories) {
+            for (SkillCategoryDTO cat : categories) {
                 if (generated >= count) break;
                 String question = "请谈谈你在\"" + cat.label() + "\"方向的技术理解和实践经验。";
                 questions.add(InterviewQuestionDTO.create(index++, question, cat.key(), cat.label(), false, null));

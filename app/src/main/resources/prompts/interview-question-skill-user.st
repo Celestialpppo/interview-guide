@@ -8,6 +8,10 @@
 ## 面试方向
 {skillName}（{skillDescription}）
 
+## Skill Tool 指令
+请先调用 Skill 工具：
+- command: {skillToolCommand}
+
 ## 问题分布要求
 | 方向 | 数量 | 说明 |
 |------|------|------|
@@ -18,6 +22,12 @@
 
 ## 历史提问记录
 {historicalSection}
+
+## 参考题库（references）
+{referenceSection}
+
+## 面试官风格与追问规则（persona）
+{personaSection}
 
 ## 输出要求
 请严格按照 JSON 格式输出问题列表，直接输出 JSON 对象，不要包含任何 Markdown 代码块标签。
