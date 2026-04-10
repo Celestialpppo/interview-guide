@@ -435,7 +435,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                     }
                     if (!sent) {
                         log.error("[Session: {}] ASR still down after restart", sessionId);
-                        sendErrorMessage(session, "语音识别连接中断，请刷新页面后重试");
+                        sendError(session, "语音识别连接中断，请刷新页面后重试");
                     }
                 } else {
                     throw ex;
@@ -445,7 +445,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         } catch (Exception e) {
             log.error("Error handling user audio for session {}", sessionId, e);
             String errorMessage = getErrorMessage(e);
-            sendErrorMessage(session, errorMessage);
+            sendError(session, errorMessage);
         }
     }
 
@@ -462,8 +462,9 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         }
 
         if (!isFinalSegment) {
-            // Streaming partial: show text only; do not drive LLM until completed + punctuation
+            // Streaming partial: 用户仍在说话，取消 pending debounce 防止提前提交
             state.markSttActivity();
+            state.cancelPendingUtteranceFlush();
             sendSubtitle(session, recognizedText, false);
             return;
         }
@@ -532,19 +533,16 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
     private boolean shouldDelayCommit(SessionState state, String text) {
         long now = System.currentTimeMillis();
-        boolean endedWithPunctuation = endsWithTerminalPunctuation(text);
-        int baseSilenceMs = Math.max(300, voiceInterviewProperties.getMinSilenceBeforeCommitMs());
-        int requiredSilenceMs = endedWithPunctuation ? Math.max(500, baseSilenceMs / 2) : baseSilenceMs;
+        int requiredSilenceMs = Math.max(300, voiceInterviewProperties.getMinSilenceBeforeCommitMs());
 
         long silenceMs = now - state.getLastSttActivityAt();
         if (silenceMs < requiredSilenceMs) {
             return true;
         }
 
-        boolean shortAndUnfinished =
-            text.trim().length() < Math.max(4, voiceInterviewProperties.getMinCommitChars())
-                && !endedWithPunctuation;
-        if (!shortAndUnfinished) {
+        // 内容较短时继续等待用户补充（最长等待 maxWaitForContinuationMs）
+        boolean shortText = text.trim().length() < Math.max(4, voiceInterviewProperties.getMinCommitChars());
+        if (!shortText) {
             return false;
         }
 
@@ -555,15 +553,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         );
     }
 
-    private boolean endsWithTerminalPunctuation(String text) {
-        if (text == null || text.isBlank()) {
-            return false;
-        }
-        String t = text.trim();
-        char last = t.charAt(t.length() - 1);
-        return last == '。' || last == '！' || last == '？'
-            || last == '.' || last == '!' || last == '?';
-    }
+
 
     /**
      * Trigger LLM response for completed sentence
@@ -750,13 +740,6 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
     /**
      * Send error message to frontend
-     */
-    private void sendErrorMessage(WebSocketSession session, String error) {
-        sendError(session, error);
-    }
-
-    /**
-     * Send error message to frontend (existing method)
      */
     private void sendError(WebSocketSession session, String error) {
         if (!session.isOpen()) {

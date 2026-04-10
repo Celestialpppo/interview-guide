@@ -33,7 +33,7 @@ interface RecentInterviewItem {
 export default function InterviewHubPage() {
   const navigate = useNavigate();
 
-  const config = useInterviewConfig({ autoLoad: true });
+  const config = useInterviewConfig({ autoLoad: false });
 
   // === 最近面试记录 ===
   const [recentInterviews, setRecentInterviews] = useState<RecentInterviewItem[]>([]);
@@ -77,11 +77,10 @@ export default function InterviewHubPage() {
     }
   }, []);
 
-  // 初始加载：先加载 skills，再用 skills 加载面试记录（避免竞态重复请求）
+  // 初始加载：skills 和 resumes 并行，再用 skills 加载面试记录
   useEffect(() => {
     const init = async () => {
-      const skills = await config.loadSkills();
-      await config.loadResumes();
+      const [skills] = await Promise.all([config.loadSkills(), config.loadResumes()]);
       await loadRecentInterviews(skills);
     };
     init();
@@ -147,8 +146,20 @@ export default function InterviewHubPage() {
             </label>
             <div className="grid grid-cols-2 gap-3">
               {([
-                { value: 'text' as InterviewMode, label: '文字面试', icon: FileText, desc: '逐题答题，AI 评估打分' },
-                { value: 'voice' as InterviewMode, label: '语音面试', icon: Mic, desc: '实时语音对话面试' },
+                {
+                  value: 'text' as InterviewMode,
+                  label: '文字面试',
+                  icon: FileText,
+                  desc: '推荐：更稳定，更适合系统化刷题与复盘',
+                  recommended: true,
+                },
+                {
+                  value: 'voice' as InterviewMode,
+                  label: '语音面试',
+                  icon: Mic,
+                  desc: '实时语音对话，更偏临场模拟',
+                  recommended: false,
+                },
               ]).map(opt => {
                 const Icon = opt.icon;
                 const selected = config.mode === opt.value;
@@ -164,8 +175,13 @@ export default function InterviewHubPage() {
                   >
                     <Icon className={`w-6 h-6 flex-shrink-0 ${selected ? 'text-primary-500' : 'text-slate-400'}`} />
                     <div className="min-w-0">
-                      <p className={`font-semibold text-sm ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
-                        {opt.label}
+                      <p className={`font-semibold text-sm flex items-center gap-2 ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
+                        <span>{opt.label}</span>
+                        {opt.recommended && (
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            推荐
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{opt.desc}</p>
                     </div>

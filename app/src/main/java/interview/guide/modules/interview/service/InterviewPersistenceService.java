@@ -4,6 +4,7 @@ import interview.guide.common.constant.CommonConstants.InterviewDefaults;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
+import interview.guide.modules.interview.model.HistoricalQuestion;
 import interview.guide.modules.interview.model.InterviewAnswerEntity;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.model.InterviewReportDTO;
@@ -21,6 +22,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -310,31 +312,47 @@ public class InterviewPersistenceService {
         return answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId);
     }
 
+    private static final int MAX_HISTORICAL_QUESTIONS = 60;
+
     /**
-     * 获取简历的历史提问列表（限制最近的 N 条）
+     * 获取历史提问列表（结构化，按分类压缩用）。
+     * 有 resumeId 时精确匹配 resumeId + skillId；无 resumeId 时按 skillId 查全部（通用模式兜底）。
      */
-    public List<String> getHistoricalQuestionsByResumeId(Long resumeId) {
-        // 只查询最近的 10 个会话，避免加载过多历史数据
-        List<InterviewSessionEntity> sessions = sessionRepository.findTop10ByResumeIdOrderByCreatedAtDesc(resumeId);
-        
-        return sessions.stream()
+    public List<HistoricalQuestion> getHistoricalQuestions(String skillId, Long resumeId) {
+        List<InterviewSessionEntity> sessions;
+        if (resumeId != null) {
+            sessions = sessionRepository.findTop10ByResumeIdAndSkillIdOrderByCreatedAtDesc(resumeId, skillId);
+        } else {
+            sessions = sessionRepository.findTop10BySkillIdOrderByCreatedAtDesc(skillId);
+        }
+
+        log.info("加载历史题目: skillId={}, resumeId={}, 查到 {} 个历史会话", skillId, resumeId, sessions.size());
+
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        List<HistoricalQuestion> result = sessions.stream()
             .map(InterviewSessionEntity::getQuestionsJson)
             .filter(json -> json != null && !json.isEmpty())
             .flatMap(json -> {
                 try {
-                    List<InterviewQuestionDTO> questions = objectMapper.readValue(json, 
+                    List<InterviewQuestionDTO> questions = objectMapper.readValue(json,
                         new TypeReference<List<InterviewQuestionDTO>>() {});
-                    // 过滤掉追问，只保留主问题作为历史参考
                     return questions.stream()
                         .filter(q -> !q.isFollowUp())
-                        .map(InterviewQuestionDTO::question);
+                        .map(q -> new HistoricalQuestion(q.question(), q.type(), q.topicSummary()));
                 } catch (Exception e) {
                     log.error("解析历史问题JSON失败", e);
-                    return java.util.stream.Stream.empty();
+                    return java.util.stream.Stream.<HistoricalQuestion>empty();
                 }
             })
-            .distinct()
-            .limit(30) // 核心改动：只保留最近的 30 道题
+            .filter(hq -> seen.add(hq.question()))
+            .limit(MAX_HISTORICAL_QUESTIONS)
             .toList();
+
+        log.info("历史题目加载完成: 去重后 {} 道主问题，按分类: {}", result.size(),
+            result.stream().collect(java.util.stream.Collectors.groupingBy(
+                hq -> hq.type() != null ? hq.type() : "GENERAL",
+                java.util.stream.Collectors.counting())));
+
+        return result;
     }
 }

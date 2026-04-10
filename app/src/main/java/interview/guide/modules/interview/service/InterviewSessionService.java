@@ -9,6 +9,7 @@ import interview.guide.infrastructure.redis.InterviewSessionCache;
 import interview.guide.infrastructure.redis.InterviewSessionCache.CachedSession;
 import interview.guide.modules.interview.listener.EvaluateStreamProducer;
 import interview.guide.modules.interview.model.CreateInterviewRequest;
+import interview.guide.modules.interview.model.HistoricalQuestion;
 import interview.guide.modules.interview.model.InterviewAnswerEntity;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.model.InterviewReportDTO;
@@ -69,11 +70,9 @@ public class InterviewSessionService {
         log.info("创建新面试会话: {}, skill: {}, difficulty: {}, questionCount: {}, resumeId: {}",
             sessionId, skillId, difficulty, request.questionCount(), request.resumeId());
 
-        // 获取历史问题
-        List<String> historicalQuestions = null;
-        if (request.resumeId() != null) {
-            historicalQuestions = persistenceService.getHistoricalQuestionsByResumeId(request.resumeId());
-        }
+        // 获取历史问题（通用模式按 skillId 查询，有简历时按 resumeId + skillId 精确匹配）
+        List<HistoricalQuestion> historicalQuestions =
+            persistenceService.getHistoricalQuestions(skillId, request.resumeId());
 
         // 获取 LLM 客户端
         ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(request.llmProvider());

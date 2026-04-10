@@ -70,7 +70,7 @@ public class InterviewSessionCache {
             try {
                 this.questionsJson = objectMapper.writeValueAsString(questions);
             } catch (JacksonException e) {
-                throw new BusinessException("序列化问题列表失败", e);
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "序列化问题列表失败", e);
             }
         }
 

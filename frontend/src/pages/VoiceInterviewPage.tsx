@@ -60,6 +60,34 @@ export default function VoiceInterviewPage() {
   const autoStartRef = useRef(false);
   const blockMicToServerRef = useRef(false);
   const lastAiCommittedTextRef = useRef('');
+  const pendingAiTextCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPendingAiTextCommit = useCallback(() => {
+    if (pendingAiTextCommitRef.current) {
+      clearTimeout(pendingAiTextCommitRef.current);
+      pendingAiTextCommitRef.current = null;
+    }
+  }, []);
+
+  const commitAiMessage = useCallback((rawText: string) => {
+    const normalized = (rawText || '').trim();
+    if (!normalized || normalized === lastAiCommittedTextRef.current) {
+      return;
+    }
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === 'ai' && last.text.trim() === normalized) {
+        return prev;
+      }
+      return [
+        ...prev,
+        { role: 'ai', text: normalized, id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
+      ];
+    });
+    lastAiCommittedTextRef.current = normalized;
+    // 提交后清除活跃字幕，避免同一段文字同时出现在历史 + 活跃区域
+    setAiText(prev => prev?.trim() === normalized ? '' : prev);
+  }, []);
 
   // Load skills for template name display
   useEffect(() => {
@@ -82,8 +110,9 @@ export default function VoiceInterviewPage() {
       if (wsRef.current) {
         wsRef.current.disconnect();
       }
+      clearPendingAiTextCommit();
     };
-  }, []);
+  }, [clearPendingAiTextCommit]);
 
   // Start interview timer
   useEffect(() => {
@@ -107,6 +136,8 @@ export default function VoiceInterviewPage() {
       if (playPromise !== undefined) {
         playPromise.catch(() => {
           setError('请点击页面任意位置以启用音频播放');
+          blockMicToServerRef.current = false;
+          setIsAiSpeaking(false);
         });
       }
     }
@@ -180,34 +211,48 @@ export default function VoiceInterviewPage() {
                 if (isFinal && text.trim()) {
                   setMessages(prev => [
                     ...prev,
-                    { role: 'user', text: text.trim(), id: Date.now().toString() }
+                    { role: 'user', text: text.trim(), id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
                   ]);
                   setUserText('');
                 }
               },
               onAudioResponse: (audioData, text) => {
                 const hasAudio = !!(audioData && audioData.length > 0);
-                setAiAudio(audioData);
-                setAiText(text);
-                setIsAiSpeaking(hasAudio);
-                blockMicToServerRef.current = hasAudio;
-
                 const normalized = (text || '').trim();
-                if (!hasAudio && normalized && normalized !== lastAiCommittedTextRef.current) {
-                  setMessages(prev => [
-                    ...prev,
-                    { role: 'ai', text: normalized, id: (Date.now() + 1).toString() }
-                  ]);
-                  lastAiCommittedTextRef.current = normalized;
+                if (hasAudio) {
+                  clearPendingAiTextCommit();
+                  setAiAudio(audioData);
+                  setAiText(text);
+                  // 仅在实际开始播放时再阻断上行音频，避免自动播放失败导致无法说话
+                  setIsAiSpeaking(false);
+                  blockMicToServerRef.current = false;
+                  return;
                 }
+
+                // text-only 消息先短暂缓冲，等待可能紧随其后的 audio，避免”同一句显示两次”
+                setAiAudio('');
+                setAiText(text);
+                setIsAiSpeaking(false);
+                blockMicToServerRef.current = false;
+
+                if (!normalized) {
+                  return;
+                }
+                clearPendingAiTextCommit();
+                pendingAiTextCommitRef.current = setTimeout(() => {
+                  commitAiMessage(normalized);
+                  pendingAiTextCommitRef.current = null;
+                }, 2500);
               },
               onClose: (event) => {
                 setConnectionStatus('disconnected');
+                clearPendingAiTextCommit();
                 if (event.code !== 1000) {
                   setError('连接已断开，请刷新页面重试');
                 }
               },
               onError: () => {
+                clearPendingAiTextCommit();
                 setError('WebSocket 连接错误，请检查网络后重试');
                 setConnectionStatus('disconnected');
               },
@@ -492,15 +537,10 @@ export default function VoiceInterviewPage() {
           onEnded={() => {
             setIsAiSpeaking(false);
             blockMicToServerRef.current = false;
-            const normalized = aiText.trim();
-            if (normalized && normalized !== lastAiCommittedTextRef.current) {
-              setMessages(prev => [
-                ...prev,
-                { role: 'ai', text: normalized, id: (Date.now() + 1).toString() }
-              ]);
-              lastAiCommittedTextRef.current = normalized;
-            }
+            clearPendingAiTextCommit();
+            commitAiMessage(aiText.trim());
             setAiText('');
+            setAiAudio('');
           }}
           onPlay={() => setIsAiSpeaking(true)}
           autoPlay

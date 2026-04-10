@@ -52,7 +52,11 @@ public class AnswerEvaluationService {
                 .map(q -> new QaRecord(q.questionIndex(), q.question(), q.category(), q.userAnswer()))
                 .toList();
 
-            String referenceContext = buildReferenceContext(sessionId);
+            String referenceContext = skillService.buildEvaluationReferenceSectionSafe(
+                persistenceService.findBySessionId(sessionId)
+                    .map(s -> s.getSkillId())
+                    .orElse(null)
+            );
 
             // 调用通用评估服务
             EvaluationReport report = unifiedEvaluationService.evaluate(
@@ -67,19 +71,6 @@ public class AnswerEvaluationService {
             log.error("面试评估失败: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.INTERVIEW_EVALUATION_FAILED,
                 "面试评估失败：" + e.getMessage());
-        }
-    }
-
-    private String buildReferenceContext(String sessionId) {
-        try {
-            return persistenceService.findBySessionId(sessionId)
-                .map(s -> s.getSkillId())
-                .filter(skillId -> skillId != null && !skillId.isBlank())
-                .map(skillService::buildEvaluationReferenceSection)
-                .orElse("");
-        } catch (Exception e) {
-            log.warn("加载评估参考基线失败，降级为无参考: sessionId={}, error={}", sessionId, e.getMessage());
-            return "";
         }
     }
 

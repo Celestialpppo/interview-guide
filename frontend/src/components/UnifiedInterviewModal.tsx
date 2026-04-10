@@ -140,8 +140,20 @@ export default function UnifiedInterviewModal({
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {([
-                        { value: 'text' as InterviewMode, label: '文字面试', icon: FileText, desc: '逐题答题，AI 评估' },
-                        { value: 'voice' as InterviewMode, label: '语音面试', icon: Mic, desc: '实时语音对话' },
+                        {
+                          value: 'text' as InterviewMode,
+                          label: '文字面试',
+                          icon: FileText,
+                          desc: '推荐：更稳定，更适合系统化练习',
+                          recommended: true,
+                        },
+                        {
+                          value: 'voice' as InterviewMode,
+                          label: '语音面试',
+                          icon: Mic,
+                          desc: '实时语音对话，偏临场模拟',
+                          recommended: false,
+                        },
                       ]).map(opt => {
                         const Icon = opt.icon;
                         const selected = config.mode === opt.value;
@@ -157,8 +169,13 @@ export default function UnifiedInterviewModal({
                           >
                             <Icon className={`w-5 h-5 flex-shrink-0 ${selected ? 'text-primary-500' : 'text-slate-400'}`} />
                             <div className="min-w-0">
-                              <p className={`font-semibold text-sm ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
-                                {opt.label}
+                              <p className={`font-semibold text-sm flex items-center gap-2 ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
+                                <span>{opt.label}</span>
+                                {opt.recommended && (
+                                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                    推荐
+                                  </span>
+                                )}
                               </p>
                               <p className="text-[11px] text-slate-500 dark:text-slate-400">{opt.desc}</p>
                             </div>

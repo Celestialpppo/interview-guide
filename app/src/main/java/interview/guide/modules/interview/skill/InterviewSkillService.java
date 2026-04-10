@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,6 +50,9 @@ public class InterviewSkillService {
 
     /** 预设 Skill 注册表，启动时从 classpath:skills/{skillId}/SKILL.md 加载 */
     private final Map<String, InterviewSkillProperties.SkillDefinition> presetRegistry = new TreeMap<>();
+
+    /** 参考内容缓存（classpath 资源不可变，加载一次后复用） */
+    private final Map<String, String> referenceCache = new ConcurrentHashMap<>();
 
     public InterviewSkillService(LlmProviderRegistry llmProviderRegistry,
                                  StructuredOutputInvoker structuredOutputInvoker,
@@ -214,6 +218,21 @@ public class InterviewSkillService {
         );
     }
 
+    /**
+     * 安全版本的评估参考基线：skillId 为空或加载失败时返回空字符串，不抛异常。
+     */
+    public String buildEvaluationReferenceSectionSafe(String skillId) {
+        if (skillId == null || skillId.isBlank()) {
+            return "";
+        }
+        try {
+            return buildEvaluationReferenceSection(skillId);
+        } catch (Exception e) {
+            log.warn("加载评估参考基线失败，降级为无参考: skillId={}, error={}", skillId, e.getMessage());
+            return "";
+        }
+    }
+
     private String buildReferenceSectionInternal(SkillDTO skill,
                                                  Predicate<SkillCategoryDTO> categoryFilter,
                                                  int maxChars) {
@@ -334,22 +353,19 @@ public class InterviewSkillService {
             ? "classpath:skills/_shared/references/" + referenceFile
             : "classpath:skills/" + skillId + "/references/" + referenceFile;
 
-        Resource resource = resourceLoader.getResource(location);
-        if (!resource.exists()) {
-            log.warn("reference 文件不存在: skillId={}, location={}", skillId, location);
-            return "";
-        }
-
-        try {
-            String content = resource.getContentAsString(StandardCharsets.UTF_8).trim();
-            if (content.length() > MAX_SINGLE_REFERENCE_CHARS) {
-                return content.substring(0, MAX_SINGLE_REFERENCE_CHARS) + "\n...（单文件内容已截断）";
+        return referenceCache.computeIfAbsent(location, loc -> {
+            try {
+                String content = resourceLoader.getResource(loc)
+                    .getContentAsString(StandardCharsets.UTF_8).trim();
+                if (content.length() > MAX_SINGLE_REFERENCE_CHARS) {
+                    return content.substring(0, MAX_SINGLE_REFERENCE_CHARS) + "\n...（单文件内容已截断）";
+                }
+                return content;
+            } catch (IOException e) {
+                log.warn("读取 reference 失败: skillId={}, location={}", skillId, loc, e);
+                return "";
             }
-            return content;
-        } catch (IOException e) {
-            log.warn("读取 reference 失败: skillId={}, location={}", skillId, location, e);
-            return "";
-        }
+        });
     }
 
     private boolean isSafeReferencePath(String referenceFile) {

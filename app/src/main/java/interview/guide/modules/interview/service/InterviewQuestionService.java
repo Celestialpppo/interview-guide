@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import interview.guide.modules.interview.model.HistoricalQuestion;
 
 /**
  * 面试问题生成服务
@@ -62,7 +63,7 @@ public class InterviewQuestionService {
 
     private record QuestionListDTO(List<QuestionDTO> questions) {}
 
-    private record QuestionDTO(String question, String type, String category, List<String> followUps) {}
+    private record QuestionDTO(String question, String type, String category, String topicSummary, List<String> followUps) {}
 
     public InterviewQuestionService(
             StructuredOutputInvoker structuredOutputInvoker,
@@ -89,7 +90,7 @@ public class InterviewQuestionService {
             String difficulty,
             String resumeText,
             int questionCount,
-            List<String> historicalQuestions) {
+            List<HistoricalQuestion> historicalQuestions) {
 
         SkillDTO skill = skillService.getSkill(skillId);
         Map<String, Integer> allocation = skillService.calculateAllocation(skill.categories(), questionCount);
@@ -99,8 +100,9 @@ public class InterviewQuestionService {
             difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY,
             DIFFICULTY_DESCRIPTIONS.get(InterviewDefaults.DIFFICULTY));
 
-        log.info("Skill 驱动出题: skill={}, difficulty={}, total={}, allocation={}",
-            skillId, difficulty, questionCount, allocation);
+        log.info("Skill 驱动出题: skill={}, difficulty={}, total={}, historicalCount={}, allocation={}",
+            skillId, difficulty, questionCount,
+            historicalQuestions != null ? historicalQuestions.size() : 0, allocation);
 
         try {
             Map<String, Object> variables = new HashMap<>();
@@ -138,7 +140,7 @@ public class InterviewQuestionService {
         }
     }
 
-    public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount, List<String> historicalQuestions) {
+    public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount, List<HistoricalQuestion> historicalQuestions) {
         return generateQuestionsBySkill(chatClient, InterviewDefaults.SKILL_ID, InterviewDefaults.DIFFICULTY, resumeText, questionCount, historicalQuestions);
     }
 
@@ -153,11 +155,33 @@ public class InterviewQuestionService {
         return "---简历内容开始---\n" + resumeText + "\n---简历内容结束---";
     }
 
-    private String buildHistoricalSection(List<String> historicalQuestions) {
+    private static final int TOPIC_SUMMARY_FALLBACK_LENGTH = 30;
+
+    private String buildHistoricalSection(List<HistoricalQuestion> historicalQuestions) {
         if (historicalQuestions == null || historicalQuestions.isEmpty()) {
             return "暂无历史提问";
         }
-        return "---历史提问开始---\n" + String.join("\n", historicalQuestions) + "\n---历史提问结束---";
+
+        Map<String, List<String>> grouped = new HashMap<>();
+        for (HistoricalQuestion hq : historicalQuestions) {
+            String type = hq.type() != null && !hq.type().isBlank() ? hq.type() : "GENERAL";
+            String summary = hq.topicSummary();
+            if (summary == null || summary.isBlank()) {
+                String q = hq.question();
+                summary = q.length() > TOPIC_SUMMARY_FALLBACK_LENGTH
+                    ? q.substring(0, TOPIC_SUMMARY_FALLBACK_LENGTH) + "…"
+                    : q;
+            }
+            grouped.computeIfAbsent(type, k -> new ArrayList<>()).add(summary);
+        }
+
+        StringBuilder sb = new StringBuilder("已考过的知识点（避免重复出题）：\n");
+        for (Map.Entry<String, List<String>> entry : grouped.entrySet()) {
+            sb.append("- ").append(entry.getKey()).append(": ");
+            sb.append(String.join(", ", entry.getValue()));
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     private String buildPersonaSection(String persona) {
@@ -181,13 +205,13 @@ public class InterviewQuestionService {
             }
             String type = (q.type() != null && !q.type().isBlank()) ? q.type().toUpperCase() : DEFAULT_QUESTION_TYPE;
             int mainQuestionIndex = index;
-            questions.add(InterviewQuestionDTO.create(index++, q.question(), type, q.category(), false, null));
+            questions.add(InterviewQuestionDTO.create(index++, q.question(), type, q.category(), q.topicSummary(), false, null));
 
             List<String> followUps = sanitizeFollowUps(q.followUps());
             for (int i = 0; i < followUps.size(); i++) {
                 questions.add(InterviewQuestionDTO.create(
                     index++, followUps.get(i), type,
-                    buildFollowUpCategory(q.category(), i + 1), true, mainQuestionIndex
+                    buildFollowUpCategory(q.category(), i + 1), null, true, mainQuestionIndex
                 ));
             }
         }
@@ -211,12 +235,12 @@ public class InterviewQuestionService {
             for (SkillCategoryDTO cat : categories) {
                 if (generated >= count) break;
                 String question = "请谈谈你在\"" + cat.label() + "\"方向的技术理解和实践经验。";
-                questions.add(InterviewQuestionDTO.create(index++, question, cat.key(), cat.label(), false, null));
+                questions.add(InterviewQuestionDTO.create(index++, question, cat.key(), cat.label(), null, false, null));
                 int mainIndex = index - 1;
                 for (int j = 0; j < followUpCount && generated + j + 1 < count; j++) {
                     questions.add(InterviewQuestionDTO.create(
                         index++, buildDefaultFollowUp(question, j + 1),
-                        cat.key(), buildFollowUpCategory(cat.label(), j + 1), true, mainIndex
+                        cat.key(), buildFollowUpCategory(cat.label(), j + 1), null, true, mainIndex
                     ));
                 }
                 generated++;
@@ -227,12 +251,12 @@ public class InterviewQuestionService {
         // 第二层：通用行为/软技能题
         for (int i = 0; i < Math.min(count, GENERIC_FALLBACK_QUESTIONS.length); i++) {
             String[] q = GENERIC_FALLBACK_QUESTIONS[i];
-            questions.add(InterviewQuestionDTO.create(index++, q[0], q[1], q[2], false, null));
+            questions.add(InterviewQuestionDTO.create(index++, q[0], q[1], q[2], null, false, null));
             int mainIndex = index - 1;
             for (int j = 0; j < followUpCount; j++) {
                 questions.add(InterviewQuestionDTO.create(
                     index++, buildDefaultFollowUp(q[0], j + 1),
-                    q[1], buildFollowUpCategory(q[2], j + 1), true, mainIndex
+                    q[1], buildFollowUpCategory(q[2], j + 1), null, true, mainIndex
                 ));
             }
         }

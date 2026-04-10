@@ -86,7 +86,7 @@ public class VoiceInterviewEvaluationService {
             ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
             String sessionIdStr = String.valueOf(sessionId);
-            String referenceContext = buildReferenceContext(session);
+            String referenceContext = skillService.buildEvaluationReferenceSectionSafe(session.getSkillId());
             EvaluationReport report = unifiedEvaluationService.evaluate(
                 chatClient, sessionIdStr, qaRecords, null, referenceContext);
 
@@ -271,19 +271,6 @@ public class VoiceInterviewEvaluationService {
         return sessionRepository.findById(sessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND,
                 "语音面试会话不存在: " + sessionId));
-    }
-
-    private String buildReferenceContext(VoiceInterviewSessionEntity session) {
-        try {
-            String skillId = session.getSkillId();
-            if (skillId == null || skillId.isBlank()) {
-                return "";
-            }
-            return skillService.buildEvaluationReferenceSection(skillId);
-        } catch (Exception e) {
-            log.warn("加载语音评估参考基线失败，降级为无参考: sessionId={}, error={}", session.getId(), e.getMessage());
-            return "";
-        }
     }
 
 }

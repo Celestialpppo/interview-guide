@@ -24,6 +24,12 @@ export default function RealtimeSubtitle({
   const [displayedAiText, setDisplayedAiText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const activeAiText = displayedAiText || aiText;
+  const latestAiMessage = messages.findLast(msg => msg.role === 'ai');
+  const shouldShowActiveAi =
+    isAiSpeaking &&
+    !!activeAiText &&
+    latestAiMessage?.text.trim() !== activeAiText.trim();
 
   // Typewriter effect for current AI text
   useEffect(() => {
@@ -96,10 +102,10 @@ export default function RealtimeSubtitle({
           ))}
 
           {/* Current AI Response (Active) */}
-          {isAiSpeaking && (aiText || displayedAiText) && (
+          {shouldShowActiveAi && (
             <InterviewMessageBubble
               role="interviewer"
-              text={displayedAiText || aiText}
+              text={activeAiText}
               highlight
               suffix={isTyping ? (
                 <motion.span
