@@ -5,12 +5,10 @@ import interview.guide.common.ai.StructuredOutputInvoker;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -24,20 +22,23 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 public class InterviewSkillService {
 
-    private static final Logger log = LoggerFactory.getLogger(InterviewSkillService.class);
     private static final int MIN_JD_LENGTH = 50;
 
     private static final Pattern FRONT_MATTER_PATTERN = Pattern.compile("(?s)^---\\s*\\n(.*?)\\n---\\s*\\n?(.*)$");
     private static final Pattern SKILL_ID_PATTERN = Pattern.compile(".*/skills/([^/]+)/SKILL\\.md$");
     private static final String SKILL_META_FILE = "skill.meta.yml";
+    private static final String JD_PARSE_SYSTEM_PROMPT_PATH = "classpath:prompts/jd-parse-system.st";
 
     private static final int MAX_REFERENCE_SECTION_CHARS = 12000;
+    private static final int MAX_EVALUATION_REFERENCE_SECTION_CHARS = 6000;
     private static final int MAX_SINGLE_REFERENCE_CHARS = 3000;
 
     private final LlmProviderRegistry llmProviderRegistry;
@@ -51,13 +52,12 @@ public class InterviewSkillService {
 
     public InterviewSkillService(LlmProviderRegistry llmProviderRegistry,
                                  StructuredOutputInvoker structuredOutputInvoker,
-                                 ResourceLoader resourceLoader,
-                                 @Value("classpath:prompts/jd-parse-system.st") Resource jdPromptResource) throws IOException {
+                                 ResourceLoader resourceLoader) throws IOException {
         this.llmProviderRegistry = llmProviderRegistry;
         this.structuredOutputInvoker = structuredOutputInvoker;
         this.resourceLoader = resourceLoader;
         this.jdOutputConverter = new BeanOutputConverter<>(CategoryListDTO.class) {};
-        this.jdSystemPromptTemplate = new PromptTemplate(jdPromptResource.getContentAsString(StandardCharsets.UTF_8));
+        this.jdSystemPromptTemplate = new PromptTemplate(loadClasspathPrompt(JD_PARSE_SYSTEM_PROMPT_PATH));
     }
 
     @PostConstruct
@@ -195,10 +195,32 @@ public class InterviewSkillService {
     }
 
     public String buildReferenceSection(SkillDTO skill, Map<String, Integer> allocation) {
+        return buildReferenceSectionInternal(
+            skill,
+            category -> allocation.getOrDefault(category.key(), 0) > 0,
+            MAX_REFERENCE_SECTION_CHARS
+        );
+    }
+
+    /**
+     * 评估阶段参考基线：不限制题量分配，覆盖该 skill 下所有配置了 reference 的分类。
+     */
+    public String buildEvaluationReferenceSection(String skillId) {
+        SkillDTO skill = getSkill(skillId);
+        return buildReferenceSectionInternal(
+            skill,
+            category -> true,
+            MAX_EVALUATION_REFERENCE_SECTION_CHARS
+        );
+    }
+
+    private String buildReferenceSectionInternal(SkillDTO skill,
+                                                 Predicate<SkillCategoryDTO> categoryFilter,
+                                                 int maxChars) {
         StringBuilder sb = new StringBuilder();
 
         for (SkillCategoryDTO category : skill.categories()) {
-            if (allocation.getOrDefault(category.key(), 0) <= 0) {
+            if (!categoryFilter.test(category)) {
                 continue;
             }
             if (category.ref() == null || category.ref().isBlank()) {
@@ -216,14 +238,19 @@ public class InterviewSkillService {
             sb.append("### ").append(category.label()).append(" (").append(category.key()).append(")\n");
             sb.append(referenceContent);
 
-            if (sb.length() >= MAX_REFERENCE_SECTION_CHARS) {
-                sb.setLength(MAX_REFERENCE_SECTION_CHARS);
+            if (sb.length() >= maxChars) {
+                sb.setLength(maxChars);
                 sb.append("\n...（references 已截断）");
                 break;
             }
         }
 
         return sb.isEmpty() ? "未配置 references。" : sb.toString();
+    }
+
+    private String loadClasspathPrompt(String path) throws IOException {
+        Resource resource = resourceLoader.getResource(path);
+        return resource.getContentAsString(StandardCharsets.UTF_8);
     }
 
     private InterviewSkillProperties.SkillDefinition parseSkillDefinition(String skillId, Resource resource, Yaml yaml) {

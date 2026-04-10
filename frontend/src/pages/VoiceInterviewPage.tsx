@@ -59,6 +59,7 @@ export default function VoiceInterviewPage() {
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoStartRef = useRef(false);
   const blockMicToServerRef = useRef(false);
+  const lastAiCommittedTextRef = useRef('');
 
   // Load skills for template name display
   useEffect(() => {
@@ -185,10 +186,20 @@ export default function VoiceInterviewPage() {
                 }
               },
               onAudioResponse: (audioData, text) => {
+                const hasAudio = !!(audioData && audioData.length > 0);
                 setAiAudio(audioData);
                 setAiText(text);
-                setIsAiSpeaking(true);
-                blockMicToServerRef.current = !!(audioData && audioData.length > 0);
+                setIsAiSpeaking(hasAudio);
+                blockMicToServerRef.current = hasAudio;
+
+                const normalized = (text || '').trim();
+                if (!hasAudio && normalized && normalized !== lastAiCommittedTextRef.current) {
+                  setMessages(prev => [
+                    ...prev,
+                    { role: 'ai', text: normalized, id: (Date.now() + 1).toString() }
+                  ]);
+                  lastAiCommittedTextRef.current = normalized;
+                }
               },
               onClose: (event) => {
                 setConnectionStatus('disconnected');
@@ -481,13 +492,15 @@ export default function VoiceInterviewPage() {
           onEnded={() => {
             setIsAiSpeaking(false);
             blockMicToServerRef.current = false;
-            if (aiText.trim()) {
+            const normalized = aiText.trim();
+            if (normalized && normalized !== lastAiCommittedTextRef.current) {
               setMessages(prev => [
                 ...prev,
-                { role: 'ai', text: aiText.trim(), id: (Date.now() + 1).toString() }
+                { role: 'ai', text: normalized, id: (Date.now() + 1).toString() }
               ]);
-              setAiText('');
+              lastAiCommittedTextRef.current = normalized;
             }
+            setAiText('');
           }}
           onPlay={() => setIsAiSpeaking(true)}
           autoPlay

@@ -4,6 +4,10 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Voice interview configuration properties
  */
@@ -18,11 +22,29 @@ public class VoiceInterviewProperties {
     private AliyunConfig aliyun = new AliyunConfig();
     private RateLimitConfig rateLimit = new RateLimitConfig();
     private AudioConfig audio = new AudioConfig();
+    private QwenConfig qwen = new QwenConfig();
+    private OpeningConfig opening = new OpeningConfig();
 
     /**
      * 最后一次 STT 定稿后，再等待这么久才调用 LLM，用于把多次 VAD 切段合并成一轮回答。
      */
-    private int userUtteranceDebounceMs = 1600;
+    private int userUtteranceDebounceMs = 900;
+    /**
+     * 判定“用户已说完”前要求的最小静音时长（毫秒）。
+     */
+    private int minSilenceBeforeCommitMs = 1400;
+    /**
+     * 当一句话很短且没有结束标点时，延迟提交，等待后续补充。
+     */
+    private int minCommitChars = 12;
+    /**
+     * 允许等待用户继续补充的最长时间（毫秒），超过后强制提交。
+     */
+    private int maxWaitForContinuationMs = 4500;
+    /**
+     * 语音面试单轮面试官回复最大字符数（超出会截断到句子边界）。
+     */
+    private int aiQuestionMaxChars = 120;
 
     @Data
     public static class PhaseConfig {
@@ -86,5 +108,48 @@ public class VoiceInterviewProperties {
         private int bitRate = 24000;
         private int channels = 1;
         private int chunkDuration = 2000; // 2 seconds
+    }
+
+    @Data
+    public static class QwenConfig {
+        private AsrConfig asr = new AsrConfig();
+        private QwenTtsConfig tts = new QwenTtsConfig();
+    }
+
+    @Data
+    public static class AsrConfig {
+        private String url = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime";
+        private String model = "qwen3-asr-flash-realtime";
+        private String apiKey;
+        private String language = "zh";
+        private String format = "pcm";
+        private int sampleRate = 16000;
+        private boolean enableTurnDetection = true;
+        private String turnDetectionType = "server_vad";
+        private float turnDetectionThreshold = 0.0f;
+        private int turnDetectionSilenceDurationMs = 1000;
+    }
+
+    @Data
+    public static class QwenTtsConfig {
+        private String model = "qwen3-tts-flash-realtime";
+        private String apiKey;
+        private String voice = "Cherry";
+        private String format = "pcm";
+        private int sampleRate = 24000;
+        private String mode = "commit";
+        private String languageType = "Chinese";
+        private float speechRate = 1.0f;
+        private int volume = 60;
+    }
+
+    @Data
+    public static class OpeningConfig {
+        private Map<String, String> skillQuestions = new LinkedHashMap<>();
+        private List<String> algorithmSkills = List.of("algorithm-bytedance", "algorithm");
+        private String algorithmQuestion =
+            "你好，我是本场面试官。先做一道算法与数据结构热身题：请你从“哈希表/堆/栈/队列/树/图”里选两个，结合一道你熟悉的题，口述“为什么选这个结构、核心步骤、时间复杂度、空间复杂度、边界条件与反例”。本场不需要写代码，重点看你的思路和取舍。";
+        private String backendQuestion =
+            "你好，我是本场面试官。第一个问题：请用 1 分钟介绍一个你深度参与的后端项目，按三点回答：业务目标、你负责的核心模块、核心技术栈。说完我会立刻追问一个关键技术决策。";
     }
 }

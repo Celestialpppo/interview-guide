@@ -1,5 +1,7 @@
 package interview.guide.infrastructure.redis;
 
+import interview.guide.common.exception.BusinessException;
+import interview.guide.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.*;
@@ -185,10 +187,10 @@ public class RedisService {
                     lock.unlock();
                 }
             }
-            throw new RuntimeException("获取锁失败: " + lockKey);
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "获取锁失败: " + lockKey);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("获取锁被中断: " + lockKey, e);
+            throw new BusinessException("获取锁被中断: " + lockKey, e);
         }
     }
 

@@ -5,6 +5,11 @@ display:
   iconBg: bg-blue-100 dark:bg-blue-900/30
   iconColor: text-blue-600 dark:text-blue-400
 categories:
+  - key: JAVA
+    label: Java
+    priority: CORE
+    ref: java.md
+    shared: true
   - key: MYSQL
     label: MySQL
     priority: CORE
@@ -14,11 +19,6 @@ categories:
     label: Redis
     priority: CORE
     ref: redis.md
-    shared: true
-  - key: JAVA_CONCURRENT
-    label: Java 并发
-    priority: CORE
-    ref: java-concurrent.md
     shared: true
   - key: SPRING
     label: Spring
@@ -30,12 +30,6 @@ categories:
     priority: NORMAL
     ref: system-design-scenarios.md
     shared: true
-  - key: JAVA_BASIC
-    label: Java 基础
-    priority: NORMAL
-  - key: JAVA_COLLECTION
-    label: Java 集合
-    priority: NORMAL
   - key: PROJECT
     label: 项目经历
     priority: ALWAYS_ONE

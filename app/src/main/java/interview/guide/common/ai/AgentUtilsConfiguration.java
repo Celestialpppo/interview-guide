@@ -3,7 +3,6 @@ package interview.guide.common.ai;
 import lombok.extern.slf4j.Slf4j;
 import org.springaicommunity.agent.tools.SkillsTool;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
@@ -18,18 +17,18 @@ import org.springframework.core.io.ResourceLoader;
 public class AgentUtilsConfiguration {
 
     private final ResourceLoader resourceLoader;
-    private final String configuredSkillsRoot;
+    private final AgentUtilsProperties agentUtilsProperties;
 
     public AgentUtilsConfiguration(
-        ResourceLoader resourceLoader,
-        @Value("${app.ai.agent-utils.skills-root:classpath:skills}") String configuredSkillsRoot
+        ResourceLoader resourceLoader, AgentUtilsProperties agentUtilsProperties
     ) {
         this.resourceLoader = resourceLoader;
-        this.configuredSkillsRoot = configuredSkillsRoot;
+        this.agentUtilsProperties = agentUtilsProperties;
     }
 
     @Bean("interviewSkillsToolCallback")
     public ToolCallback interviewSkillsToolCallback() {
+        String configuredSkillsRoot = agentUtilsProperties.getSkillsRoot();
         String normalizedSkillsRoot = normalizeSkillsRoot(configuredSkillsRoot);
         Resource skillsRootResource = resourceLoader.getResource(normalizedSkillsRoot);
 

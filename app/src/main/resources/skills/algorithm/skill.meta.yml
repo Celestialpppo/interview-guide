@@ -8,21 +8,30 @@ categories:
   - key: ARRAY_LINKEDLIST
     label: 数组/链表
     priority: CORE
-    ref: array-linkedlist.md
+    ref: algorithm-data-structures.md
+    shared: true
+  - key: HASH_HEAP_QUEUE
+    label: 哈希/堆/栈/队列
+    priority: CORE
+    ref: algorithm-data-structures.md
     shared: true
   - key: TREE_GRAPH
     label: 树/图
     priority: CORE
-    ref: tree-graph.md
+    ref: algorithm-data-structures.md
     shared: true
   - key: DP
     label: 动态规划
     priority: CORE
-    ref: dp.md
+    ref: algorithm-data-structures.md
     shared: true
   - key: GREEDY_BACKTRACK
     label: 贪心/回溯
     priority: NORMAL
+    ref: algorithm-data-structures.md
+    shared: true
   - key: DESIGN
     label: 设计题
     priority: NORMAL
+    ref: algorithm-data-structures.md
+    shared: true

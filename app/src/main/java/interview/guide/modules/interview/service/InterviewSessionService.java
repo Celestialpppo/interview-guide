@@ -1,16 +1,25 @@
 package interview.guide.modules.interview.service;
 
 import interview.guide.common.constant.CommonConstants.InterviewDefaults;
+import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.infrastructure.redis.InterviewSessionCache;
 import interview.guide.infrastructure.redis.InterviewSessionCache.CachedSession;
 import interview.guide.modules.interview.listener.EvaluateStreamProducer;
-import interview.guide.modules.interview.model.*;
+import interview.guide.modules.interview.model.CreateInterviewRequest;
+import interview.guide.modules.interview.model.InterviewAnswerEntity;
+import interview.guide.modules.interview.model.InterviewQuestionDTO;
+import interview.guide.modules.interview.model.InterviewReportDTO;
+import interview.guide.modules.interview.model.InterviewSessionDTO;
+import interview.guide.modules.interview.model.InterviewSessionEntity;
+import interview.guide.modules.interview.model.SubmitAnswerRequest;
+import interview.guide.modules.interview.model.SubmitAnswerResponse;
 import interview.guide.modules.interview.model.InterviewSessionDTO.SessionStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -35,7 +44,7 @@ public class InterviewSessionService {
     private final InterviewSessionCache sessionCache;
     private final ObjectMapper objectMapper;
     private final EvaluateStreamProducer evaluateStreamProducer;
-    private final interview.guide.common.ai.LlmProviderRegistry llmProviderRegistry;
+    private final LlmProviderRegistry llmProviderRegistry;
 
     /**
      * 创建新的面试会话
@@ -67,7 +76,7 @@ public class InterviewSessionService {
         }
 
         // 获取 LLM 客户端
-        org.springframework.ai.chat.client.ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(request.llmProvider());
+        ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(request.llmProvider());
 
         // 基于 Skill 生成面试问题
         List<InterviewQuestionDTO> questions = questionService.generateQuestionsBySkill(
@@ -457,7 +466,7 @@ public class InterviewSessionService {
         if (entityOpt.isPresent()) {
             provider = entityOpt.get().getLlmProvider();
         }
-        org.springframework.ai.chat.client.ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
+        ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
         InterviewReportDTO report = evaluationService.evaluateInterview(
             chatClient,

@@ -18,28 +18,33 @@ categories:
     priority: CORE
     ref: db-design.md
     shared: true
-  - key: MYSQL
-    label: MySQL
-    priority: NORMAL
-    ref: mysql.md
-    shared: true
   - key: DISTRIBUTED
     label: 分布式
     priority: CORE
     ref: distributed.md
     shared: true
-  - key: CACHE
-    label: 缓存
+  - key: MYSQL
+    label: MySQL
     priority: NORMAL
-    ref: cache-general.md
+    ref: mysql.md
     shared: true
   - key: REDIS
     label: Redis
     priority: NORMAL
     ref: redis.md
     shared: true
+  - key: CACHE
+    label: 缓存
+    priority: NORMAL
+    ref: cache-general.md
+    shared: true
   - key: MQ
     label: 消息队列
     priority: NORMAL
     ref: mq.md
+    shared: true
+  - key: DESIGN_PATTERN
+    label: 设计模式
+    priority: NORMAL
+    ref: design-pattern.md
     shared: true

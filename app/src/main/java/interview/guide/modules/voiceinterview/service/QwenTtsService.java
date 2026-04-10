@@ -6,8 +6,8 @@ import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeCallback;
 import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeConfig;
 import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeParam;
 import com.google.gson.JsonObject;
+import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -43,38 +43,42 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 public class QwenTtsService {
 
-    // Configuration fields (injected via @Value from application.yml)
-    @Value("${app.voice-interview.qwen.tts.model}")
+    // Runtime configuration values (loaded from VoiceInterviewProperties; setters kept for tests)
     private String model;
 
-    @Value("${app.voice-interview.qwen.tts.api-key}")
     private String apiKey;
 
-    @Value("${app.voice-interview.qwen.tts.voice}")
     private String voice;
 
-    @Value("${app.voice-interview.qwen.tts.format}")
     private String format;
 
-    @Value("${app.voice-interview.qwen.tts.sample-rate}")
     private Integer sampleRate;
 
-    @Value("${app.voice-interview.qwen.tts.mode}")
     private String mode;
 
-    @Value("${app.voice-interview.qwen.tts.language-type}")
     private String languageType;
 
-    @Value("${app.voice-interview.qwen.tts.speech-rate}")
     private Float speechRate;
 
-    @Value("${app.voice-interview.qwen.tts.volume}")
     private Integer volume;
+
+    public QwenTtsService(VoiceInterviewProperties voiceInterviewProperties) {
+        VoiceInterviewProperties.QwenTtsConfig tts = voiceInterviewProperties.getQwen().getTts();
+        this.model = tts.getModel();
+        this.apiKey = tts.getApiKey();
+        this.voice = tts.getVoice();
+        this.format = tts.getFormat();
+        this.sampleRate = tts.getSampleRate();
+        this.mode = tts.getMode();
+        this.languageType = tts.getLanguageType();
+        this.speechRate = tts.getSpeechRate();
+        this.volume = tts.getVolume();
+    }
 
     /**
      * Initialize the TTS service.
      * This method is automatically called by Spring after the service is constructed
-     * and all configuration values have been injected via @Value annotations.
+     * and all configuration values have been loaded from VoiceInterviewProperties.
      *
      * @throws IllegalStateException if apiKey is not configured
      */

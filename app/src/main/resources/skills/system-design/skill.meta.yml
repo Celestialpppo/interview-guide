@@ -25,6 +25,11 @@ categories:
     priority: NORMAL
     ref: cache-general.md
     shared: true
+  - key: DESIGN_PATTERN
+    label: 设计模式
+    priority: NORMAL
+    ref: design-pattern.md
+    shared: true
   - key: MQ
     label: 消息队列
     priority: NORMAL

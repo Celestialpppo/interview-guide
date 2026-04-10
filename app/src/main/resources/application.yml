@@ -26,6 +26,8 @@ springdoc:
   packages-to-scan: interview.guide.modules
 
 spring:
+  config:
+    import: optional:classpath:voice-interview-opening.yml
   application:
     name: ai-interview-platform
 
@@ -215,7 +217,15 @@ app:
         volume: 60
 
     # 用户说完一小段 STT 定稿后，再等多久（毫秒）才触发面试官回复；过短会一句一答很碎
-    user-utterance-debounce-ms: ${APP_VOICE_USER_UTTERANCE_DEBOUNCE_MS:1600}
+    user-utterance-debounce-ms: ${APP_VOICE_USER_UTTERANCE_DEBOUNCE_MS:900}
+    # 触发提交前要求的最小静音时长（毫秒）
+    min-silence-before-commit-ms: ${APP_VOICE_MIN_SILENCE_BEFORE_COMMIT_MS:1400}
+    # 当内容较短且无句末标点时，先不提交，等待继续说
+    min-commit-chars: ${APP_VOICE_MIN_COMMIT_CHARS:12}
+    # 最长等待用户继续补充的时间（毫秒），超时后强制提交
+    max-wait-for-continuation-ms: ${APP_VOICE_MAX_WAIT_FOR_CONTINUATION_MS:4500}
+    # 语音面试单轮面试官回复最大长度（字符）
+    ai-question-max-chars: ${APP_VOICE_AI_QUESTION_MAX_CHARS:120}
 
     # Rate limiting
     rate-limit:

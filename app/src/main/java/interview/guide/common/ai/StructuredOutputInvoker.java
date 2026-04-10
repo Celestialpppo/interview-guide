@@ -5,7 +5,6 @@ import interview.guide.common.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,12 +23,9 @@ public class StructuredOutputInvoker {
     private final int maxAttempts;
     private final boolean includeLastErrorInRetryPrompt;
 
-    public StructuredOutputInvoker(
-        @Value("${app.ai.structured-max-attempts:2}") int maxAttempts,
-        @Value("${app.ai.structured-include-last-error:true}") boolean includeLastErrorInRetryPrompt
-    ) {
-        this.maxAttempts = Math.max(1, maxAttempts);
-        this.includeLastErrorInRetryPrompt = includeLastErrorInRetryPrompt;
+    public StructuredOutputInvoker(StructuredOutputProperties properties) {
+        this.maxAttempts = Math.max(1, properties.getStructuredMaxAttempts());
+        this.includeLastErrorInRetryPrompt = properties.isStructuredIncludeLastError();
     }
 
     public <T> T invoke(

@@ -6,6 +6,7 @@ import interview.guide.common.evaluation.QaRecord;
 import interview.guide.common.evaluation.UnifiedEvaluationService;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
+import interview.guide.modules.interview.skill.InterviewSkillService;
 import interview.guide.modules.voiceinterview.dto.VoiceEvaluationDetailDTO;
 import interview.guide.modules.voiceinterview.dto.VoiceEvaluationDetailDTO.AnswerDetail;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewEvaluationEntity;
@@ -40,6 +41,7 @@ public class VoiceInterviewEvaluationService {
     private final VoiceInterviewMessageRepository messageRepository;
     private final VoiceInterviewSessionRepository sessionRepository;
     private final ObjectMapper objectMapper;
+    private final InterviewSkillService skillService;
 
     public VoiceInterviewEvaluationService(
             UnifiedEvaluationService unifiedEvaluationService,
@@ -47,13 +49,15 @@ public class VoiceInterviewEvaluationService {
             VoiceInterviewEvaluationRepository evaluationRepository,
             VoiceInterviewMessageRepository messageRepository,
             VoiceInterviewSessionRepository sessionRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            InterviewSkillService skillService) {
         this.unifiedEvaluationService = unifiedEvaluationService;
         this.llmProviderRegistry = llmProviderRegistry;
         this.evaluationRepository = evaluationRepository;
         this.messageRepository = messageRepository;
         this.sessionRepository = sessionRepository;
         this.objectMapper = objectMapper;
+        this.skillService = skillService;
     }
 
     /**
@@ -69,8 +73,9 @@ public class VoiceInterviewEvaluationService {
                 .findBySessionIdOrderBySequenceNumAsc(sessionId);
 
             if (messages.isEmpty()) {
-                throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED,
-                    "面试会话无对话记录: " + sessionId);
+                log.warn("语音面试会话无对话记录，生成空评估结果: sessionId={}", sessionId);
+                saveEmptyEvaluationTransactional(sessionId, session);
+                return;
             }
 
             // 从消息中构建问答记录
@@ -81,8 +86,9 @@ public class VoiceInterviewEvaluationService {
             ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
             String sessionIdStr = String.valueOf(sessionId);
+            String referenceContext = buildReferenceContext(session);
             EvaluationReport report = unifiedEvaluationService.evaluate(
-                chatClient, sessionIdStr, qaRecords, null);
+                chatClient, sessionIdStr, qaRecords, null, referenceContext);
 
             // 保存评估结果（事务内）
             saveEvaluationTransactional(sessionId, session, report);
@@ -176,6 +182,30 @@ public class VoiceInterviewEvaluationService {
         }
     }
 
+    @Transactional
+    public void saveEmptyEvaluationTransactional(Long sessionId, VoiceInterviewSessionEntity session) {
+        try {
+            VoiceInterviewEvaluationEntity entity = evaluationRepository.findBySessionId(sessionId)
+                .orElseGet(() -> VoiceInterviewEvaluationEntity.builder().sessionId(sessionId).build());
+
+            entity.setOverallScore(0);
+            entity.setOverallFeedback("本次语音面试未形成有效对话记录，暂无可评估内容。");
+            entity.setQuestionEvaluationsJson("[]");
+            entity.setStrengthsJson("[]");
+            entity.setImprovementsJson("[\"请先完成至少一轮有效问答后再生成评估。\"]");
+            entity.setReferenceAnswersJson("[]");
+            entity.setInterviewerRole(session.getRoleType());
+            entity.setInterviewDate(session.getStartTime());
+
+            evaluationRepository.save(entity);
+            log.info("空评估结果已保存: sessionId={}", sessionId);
+        } catch (Exception e) {
+            log.error("保存空评估结果失败: sessionId={}", sessionId, e);
+            throw new BusinessException(ErrorCode.VOICE_EVALUATION_FAILED,
+                "保存空评估失败: " + e.getMessage());
+        }
+    }
+
     /**
      * 从实体构建 DTO（供前端展示）
      */
@@ -241,6 +271,19 @@ public class VoiceInterviewEvaluationService {
         return sessionRepository.findById(sessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND,
                 "语音面试会话不存在: " + sessionId));
+    }
+
+    private String buildReferenceContext(VoiceInterviewSessionEntity session) {
+        try {
+            String skillId = session.getSkillId();
+            if (skillId == null || skillId.isBlank()) {
+                return "";
+            }
+            return skillService.buildEvaluationReferenceSection(skillId);
+        } catch (Exception e) {
+            log.warn("加载语音评估参考基线失败，降级为无参考: sessionId={}, error={}", session.getId(), e.getMessage());
+            return "";
+        }
     }
 
 }

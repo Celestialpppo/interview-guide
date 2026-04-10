@@ -10,10 +10,10 @@ categories:
     priority: CORE
     ref: network-os.md
     shared: true
-  - key: JAVA_CONCURRENT
-    label: Java 并发
+  - key: JAVA
+    label: Java
     priority: CORE
-    ref: java-concurrent.md
+    ref: java.md
     shared: true
   - key: MYSQL
     label: MySQL
@@ -35,11 +35,11 @@ categories:
     priority: NORMAL
     ref: system-design-scenarios.md
     shared: true
-  - key: PROJECT
-    label: 项目经历
-    priority: ALWAYS_ONE
   - key: SPRING
     label: Spring
     priority: NORMAL
     ref: spring.md
     shared: true
+  - key: PROJECT
+    label: 项目经历
+    priority: ALWAYS_ONE

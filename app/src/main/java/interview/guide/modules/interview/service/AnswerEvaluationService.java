@@ -10,6 +10,7 @@ import interview.guide.modules.interview.model.InterviewReportDTO;
 import interview.guide.modules.interview.model.InterviewReportDTO.CategoryScore;
 import interview.guide.modules.interview.model.InterviewReportDTO.QuestionEvaluation;
 import interview.guide.modules.interview.model.InterviewReportDTO.ReferenceAnswer;
+import interview.guide.modules.interview.skill.InterviewSkillService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,9 +28,15 @@ public class AnswerEvaluationService {
     private static final Logger log = LoggerFactory.getLogger(AnswerEvaluationService.class);
 
     private final UnifiedEvaluationService unifiedEvaluationService;
+    private final InterviewPersistenceService persistenceService;
+    private final InterviewSkillService skillService;
 
-    public AnswerEvaluationService(UnifiedEvaluationService unifiedEvaluationService) {
+    public AnswerEvaluationService(UnifiedEvaluationService unifiedEvaluationService,
+                                   InterviewPersistenceService persistenceService,
+                                   InterviewSkillService skillService) {
         this.unifiedEvaluationService = unifiedEvaluationService;
+        this.persistenceService = persistenceService;
+        this.skillService = skillService;
     }
 
     /**
@@ -45,8 +52,12 @@ public class AnswerEvaluationService {
                 .map(q -> new QaRecord(q.questionIndex(), q.question(), q.category(), q.userAnswer()))
                 .toList();
 
+            String referenceContext = buildReferenceContext(sessionId);
+
             // 调用通用评估服务
-            EvaluationReport report = unifiedEvaluationService.evaluate(chatClient, sessionId, qaRecords, resumeText);
+            EvaluationReport report = unifiedEvaluationService.evaluate(
+                chatClient, sessionId, qaRecords, resumeText, referenceContext
+            );
 
             // 转为文字面试专用 DTO
             return toInterviewReportDTO(report);
@@ -56,6 +67,19 @@ public class AnswerEvaluationService {
             log.error("面试评估失败: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.INTERVIEW_EVALUATION_FAILED,
                 "面试评估失败：" + e.getMessage());
+        }
+    }
+
+    private String buildReferenceContext(String sessionId) {
+        try {
+            return persistenceService.findBySessionId(sessionId)
+                .map(s -> s.getSkillId())
+                .filter(skillId -> skillId != null && !skillId.isBlank())
+                .map(skillService::buildEvaluationReferenceSection)
+                .orElse("");
+        } catch (Exception e) {
+            log.warn("加载评估参考基线失败，降级为无参考: sessionId={}, error={}", sessionId, e.getMessage());
+            return "";
         }
     }
 

@@ -2,6 +2,7 @@ package interview.guide.modules.interview.skill;
 
 import interview.guide.common.annotation.RateLimit;
 import interview.guide.common.result.Result;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,7 +35,7 @@ public class InterviewSkillController {
 
     @PostMapping("/parse-jd")
     @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
-    public Result<List<InterviewSkillService.CategoryDTO>> parseJd(@RequestBody ParseJdRequest request) {
+    public Result<List<InterviewSkillService.CategoryDTO>> parseJd(@Valid @RequestBody ParseJdRequest request) {
         return Result.success(skillService.parseJd(request.jdText()));
     }
 

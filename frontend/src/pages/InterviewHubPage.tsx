@@ -5,14 +5,18 @@ import {
   ChevronDown, ChevronUp, FileStack, FileText, Loader2, Mic,
   RefreshCw, Sparkles,
 } from 'lucide-react';
-import { skillApi, type SkillDTO, type CategoryDTO } from '../api/skill';
-import { historyApi, type ResumeListItem } from '../api/history';
+import { type SkillDTO } from '../api/skill';
 import { interviewApi, type TextSessionMeta } from '../api/interview';
 import { voiceInterviewApi, type SessionMeta } from '../api/voiceInterview';
 import { getSkillIcon } from '../utils/skillIcons';
 import { getTemplateName } from '../utils/voiceInterview';
 import { getScoreTextColor } from '../utils/score';
-import { type Difficulty, type InterviewMode, DIFFICULTY_OPTIONS } from '../components/UnifiedInterviewModal';
+import { formatDateTime } from '../utils/date';
+import {
+  useInterviewConfig,
+  type InterviewMode,
+  DIFFICULTY_OPTIONS,
+} from '../hooks/useInterviewConfig';
 
 // 统一的面试记录项
 interface RecentInterviewItem {
@@ -29,64 +33,19 @@ interface RecentInterviewItem {
 export default function InterviewHubPage() {
   const navigate = useNavigate();
 
-  // === 配置状态 ===
-  const [mode, setMode] = useState<InterviewMode>('text');
-  const [skillId, setSkillId] = useState('java-backend');
-  const [difficulty, setDifficulty] = useState<Difficulty>('mid');
-  const [skills, setSkills] = useState<SkillDTO[]>([]);
-  const [loadingSkills, setLoadingSkills] = useState(false);
-
-  // 更多选项
-  const [showMore, setShowMore] = useState(false);
-  const [resumeId, setResumeId] = useState<number | undefined>(undefined);
-  const [resumes, setResumes] = useState<ResumeListItem[]>([]);
-  const [questionCount, setQuestionCount] = useState(6);
-  const [plannedDuration, setPlannedDuration] = useState(30);
-
-  // 自定义 JD
-  const [customJdText, setCustomJdText] = useState('');
-  const [customCategories, setCustomCategories] = useState<CategoryDTO[]>([]);
-  const [parsingJd, setParsingJd] = useState(false);
+  const config = useInterviewConfig({ autoLoad: true });
 
   // === 最近面试记录 ===
   const [recentInterviews, setRecentInterviews] = useState<RecentInterviewItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
 
-  // 加载数据
-  useEffect(() => {
-    Promise.all([loadSkills(), loadResumes(), loadRecentInterviews()]);
-  }, []);
-
-  const loadSkills = async () => {
-    setLoadingSkills(true);
-    try {
-      const data = await skillApi.listSkills();
-      setSkills(data);
-    } catch (err) {
-      console.error('Failed to load skills:', err);
-    } finally {
-      setLoadingSkills(false);
-    }
-  };
-
-  const loadResumes = async () => {
-    try {
-      const data = await historyApi.getResumes();
-      setResumes(data);
-    } catch (err) {
-      console.error('Failed to load resumes:', err);
-    }
-  };
-
-  const loadRecentInterviews = useCallback(async () => {
+  const loadRecentInterviews = useCallback(async (allSkills: SkillDTO[]) => {
     setLoadingRecent(true);
     try {
       const [textSessions, voiceSessions] = await Promise.all([
         interviewApi.listSessions().catch(() => [] as TextSessionMeta[]),
         voiceInterviewApi.getAllSessions().catch(() => [] as SessionMeta[]),
       ]);
-
-      const allSkills = skills.length > 0 ? skills : await skillApi.listSkills().catch(() => []);
 
       const items: RecentInterviewItem[] = [
         ...textSessions.map(s => ({
@@ -116,63 +75,56 @@ export default function InterviewHubPage() {
     } finally {
       setLoadingRecent(false);
     }
-  }, [skills]);
+  }, []);
 
-  const handleParseJd = async () => {
-    if (!customJdText || customJdText.length < 50) {
-      alert('JD 内容太少（至少 50 字），请补充后重试');
-      return;
-    }
-    setParsingJd(true);
-    try {
-      const categories = await skillApi.parseJd(customJdText);
-      setCustomCategories(categories);
-    } catch (err) {
-      alert('JD 解析失败，请重试或选择预设主题');
-    } finally {
-      setParsingJd(false);
-    }
-  };
+  // 初始加载：先加载 skills，再用 skills 加载面试记录（避免竞态重复请求）
+  useEffect(() => {
+    const init = async () => {
+      const skills = await config.loadSkills();
+      await config.loadResumes();
+      await loadRecentInterviews(skills);
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleStart = () => {
-    const selectedSkill = skills.find(s => s.id === skillId);
+    const selectedSkill = config.selectedSkill;
     const skillName = selectedSkill?.name || '自定义';
 
-    if (mode === 'text') {
+    if (config.mode === 'text') {
       navigate('/interview', {
         state: {
-          resumeId,
+          resumeId: config.resumeId,
           interviewConfig: {
-            skillId,
+            skillId: config.skillId,
             skillName,
-            difficulty,
-            questionCount,
+            difficulty: config.difficulty,
+            questionCount: config.questionCount,
             llmProvider: 'dashscope',
-            customJdText: skillId === 'custom' ? customJdText : undefined,
-            customCategories: skillId === 'custom' ? customCategories : undefined,
+            customJdText: config.isCustomSkill ? config.customJdText : undefined,
+            customCategories: config.isCustomSkill ? config.customCategories : undefined,
           },
         },
       });
     } else {
-      const params = new URLSearchParams({ skillId, difficulty });
+      const params = new URLSearchParams({ skillId: config.skillId, difficulty: config.difficulty });
       navigate(`/voice-interview?${params.toString()}`, {
         state: {
           voiceConfig: {
-            skillId,
-            difficulty,
+            skillId: config.skillId,
+            difficulty: config.difficulty,
             techEnabled: true,
             projectEnabled: true,
             hrEnabled: true,
-            plannedDuration,
-            resumeId,
+            plannedDuration: config.plannedDuration,
+            resumeId: config.resumeId,
             llmProvider: 'dashscope',
           },
         },
       });
     }
   };
-
-  const isCustomSkill = skillId === 'custom';
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -199,11 +151,11 @@ export default function InterviewHubPage() {
                 { value: 'voice' as InterviewMode, label: '语音面试', icon: Mic, desc: '实时语音对话面试' },
               ]).map(opt => {
                 const Icon = opt.icon;
-                const selected = mode === opt.value;
+                const selected = config.mode === opt.value;
                 return (
                   <button
                     key={opt.value}
-                    onClick={() => setMode(opt.value)}
+                    onClick={() => config.setMode(opt.value)}
                     className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 text-left
                       ${selected
                         ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
@@ -228,21 +180,21 @@ export default function InterviewHubPage() {
             <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
               面试方向
             </label>
-            {loadingSkills ? (
+            {config.loadingSkills ? (
               <div className="flex items-center gap-2 py-4 text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">加载中...</span>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {skills.map(skill => {
-                  const selected = skillId === skill.id;
+                {config.skills.map(skill => {
+                  const selected = config.skillId === skill.id;
                   const IconComponent = getSkillIcon(skill.id);
                   const fallbackEmoji = skill.display?.icon || '📋';
                   return (
                     <button
                       key={skill.id}
-                      onClick={() => setSkillId(skill.id)}
+                      onClick={() => config.setSkillId(skill.id)}
                       className={`flex items-center gap-2.5 p-3 rounded-xl border-2 transition-all duration-200 text-left
                         ${selected
                           ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
@@ -267,24 +219,24 @@ export default function InterviewHubPage() {
                 })}
                 {/* 自定义按钮 */}
                 <button
-                  onClick={() => setSkillId('custom')}
+                  onClick={() => config.setSkillId('custom')}
                   className={`flex items-center gap-2.5 p-3 rounded-xl border-2 border-dashed transition-all duration-200 text-left
-                    ${isCustomSkill
+                    ${config.isCustomSkill
                       ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
                       : 'border-slate-200 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600'
                     }`}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isCustomSkill ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
+                    config.isCustomSkill ? 'bg-primary-100 dark:bg-primary-900/50' : 'bg-slate-100 dark:bg-slate-700'
                   }`}>
                     {(() => {
                       const CustomIcon = getSkillIcon('custom');
                       return CustomIcon
-                        ? <CustomIcon className={`w-4 h-4 ${isCustomSkill ? 'text-primary-600 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400'}`} />
+                        ? <CustomIcon className={`w-4 h-4 ${config.isCustomSkill ? 'text-primary-600 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400'}`} />
                         : <span className="text-sm">✨</span>;
                     })()}
                   </div>
-                  <span className={`text-xs font-medium ${isCustomSkill ? 'text-primary-700 dark:text-primary-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                  <span className={`text-xs font-medium ${config.isCustomSkill ? 'text-primary-700 dark:text-primary-300' : 'text-slate-500 dark:text-slate-400'}`}>
                     自定义 JD
                   </span>
                 </button>
@@ -294,7 +246,7 @@ export default function InterviewHubPage() {
 
           {/* 自定义 JD 输入 */}
           <AnimatePresence>
-            {isCustomSkill && (
+            {config.isCustomSkill && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
@@ -303,8 +255,8 @@ export default function InterviewHubPage() {
               >
                 <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                   <textarea
-                    value={customJdText}
-                    onChange={e => setCustomJdText(e.target.value)}
+                    value={config.customJdText}
+                    onChange={e => config.setCustomJdText(e.target.value)}
                     placeholder="粘贴目标岗位的职位描述（JD），至少 50 字..."
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700
@@ -313,18 +265,18 @@ export default function InterviewHubPage() {
                       focus:ring-primary-500/50 focus:border-primary-400 transition-shadow"
                   />
                   <button
-                    onClick={handleParseJd}
-                    disabled={parsingJd || !customJdText}
+                    onClick={config.handleParseJd}
+                    disabled={config.parsingJd || !config.customJdText}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg
                       bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50
                       disabled:cursor-not-allowed transition-colors"
                   >
-                    {parsingJd ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {config.parsingJd ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                     解析面试方向
                   </button>
-                  {customCategories.length > 0 && (
+                  {config.customCategories.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {customCategories.map((cat, i) => (
+                      {config.customCategories.map((cat, i) => (
                         <span
                           key={i}
                           className="px-3 py-1 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
@@ -347,11 +299,11 @@ export default function InterviewHubPage() {
             </label>
             <div className="grid grid-cols-3 gap-3">
               {DIFFICULTY_OPTIONS.map(opt => {
-                const selected = difficulty === opt.value;
+                const selected = config.difficulty === opt.value;
                 return (
                   <button
                     key={opt.value}
-                    onClick={() => setDifficulty(opt.value)}
+                    onClick={() => config.setDifficulty(opt.value)}
                     className={`py-3 px-4 rounded-xl border-2 transition-all duration-200 text-center
                       ${selected
                         ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
@@ -370,16 +322,16 @@ export default function InterviewHubPage() {
 
           {/* 更多选项 */}
           <button
-            onClick={() => setShowMore(!showMore)}
+            onClick={() => config.setShowMore(!config.showMore)}
             className="w-full flex items-center gap-2 py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
           >
-            {showMore ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {config.showMore ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             <span>更多选项</span>
             <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
           </button>
 
           <AnimatePresence>
-            {showMore && (
+            {config.showMore && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
@@ -395,21 +347,21 @@ export default function InterviewHubPage() {
                     </p>
                   </div>
                   <select
-                    value={resumeId || ''}
-                    onChange={e => setResumeId(e.target.value ? parseInt(e.target.value) : undefined)}
+                    value={config.resumeId || ''}
+                    onChange={e => config.setResumeId(e.target.value ? parseInt(e.target.value) : undefined)}
                     className="w-full px-4 py-2.5 rounded-lg border border-primary-200 dark:border-primary-700/50
                       bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white
                       focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-shadow"
                   >
                     <option value="">不使用简历（通用提问）</option>
-                    {resumes.map(r => (
+                    {config.resumes.map(r => (
                       <option key={r.id} value={r.id}>{r.filename}</option>
                     ))}
                   </select>
                 </div>
 
                 {/* 文字面试 - 题目数 */}
-                {mode === 'text' && (
+                {config.mode === 'text' && (
                   <div>
                     <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
                       题目数量
@@ -418,9 +370,9 @@ export default function InterviewHubPage() {
                       {[6, 8, 10, 12].map(n => (
                         <button
                           key={n}
-                          onClick={() => setQuestionCount(n)}
+                          onClick={() => config.setQuestionCount(n)}
                           className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all
-                            ${questionCount === n
+                            ${config.questionCount === n
                               ? 'bg-primary-500 text-white shadow-sm'
                               : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                             }`}
@@ -433,12 +385,12 @@ export default function InterviewHubPage() {
                 )}
 
                 {/* 语音面试 - 时长 */}
-                {mode === 'voice' && (
+                {config.mode === 'voice' && (
                   <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-3">
                       <p className="font-semibold text-sm text-slate-900 dark:text-white">计划面试时长</p>
                       <div className="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
-                        {plannedDuration}
+                        {config.plannedDuration}
                         <span className="text-xs font-normal text-slate-400 ml-0.5">min</span>
                       </div>
                     </div>
@@ -447,8 +399,8 @@ export default function InterviewHubPage() {
                       min="15"
                       max="60"
                       step="5"
-                      value={plannedDuration}
-                      onChange={e => setPlannedDuration(parseInt(e.target.value))}
+                      value={config.plannedDuration}
+                      onChange={e => config.setPlannedDuration(parseInt(e.target.value))}
                       className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer
                         [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4
                         [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
@@ -472,7 +424,7 @@ export default function InterviewHubPage() {
               bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700
               text-white shadow-lg shadow-primary-500/25"
           >
-            开始{mode === 'text' ? '文字' : '语音'}面试
+            开始{config.mode === 'text' ? '文字' : '语音'}面试
           </motion.button>
         </div>
       </div>
@@ -540,7 +492,7 @@ export default function InterviewHubPage() {
                     </div>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {new Date(item.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {formatDateTime(item.createdAt)}
                       </span>
                       {isEvaluating && (
                         <span className="flex items-center gap-1 text-xs text-blue-500">

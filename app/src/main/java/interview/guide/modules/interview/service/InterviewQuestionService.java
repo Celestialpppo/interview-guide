@@ -13,8 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -68,15 +67,20 @@ public class InterviewQuestionService {
     public InterviewQuestionService(
             StructuredOutputInvoker structuredOutputInvoker,
             InterviewSkillService skillService,
-            @Value("classpath:prompts/interview-question-skill-system.st") Resource skillSystemPromptResource,
-            @Value("classpath:prompts/interview-question-skill-user.st") Resource skillUserPromptResource,
-            @Value("${app.interview.follow-up-count:1}") int followUpCount) throws IOException {
+            InterviewQuestionProperties properties,
+            ResourceLoader resourceLoader) throws IOException {
         this.structuredOutputInvoker = structuredOutputInvoker;
         this.skillService = skillService;
-        this.skillSystemPromptTemplate = new PromptTemplate(skillSystemPromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.skillUserPromptTemplate = new PromptTemplate(skillUserPromptResource.getContentAsString(StandardCharsets.UTF_8));
+        this.skillSystemPromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(properties.getQuestionSystemPromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
+        this.skillUserPromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(properties.getQuestionUserPromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
         this.outputConverter = new BeanOutputConverter<>(QuestionListDTO.class);
-        this.followUpCount = Math.max(0, Math.min(followUpCount, MAX_FOLLOW_UP_COUNT));
+        this.followUpCount = Math.max(0, Math.min(properties.getFollowUpCount(), MAX_FOLLOW_UP_COUNT));
     }
 
     public List<InterviewQuestionDTO> generateQuestionsBySkill(

@@ -3,6 +3,7 @@ package interview.guide.modules.voiceinterview.service;
 import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.modules.resume.model.ResumeEntity;
 import interview.guide.modules.resume.repository.ResumeRepository;
+import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -18,11 +19,16 @@ public class DashscopeLlmService {
     private final LlmProviderRegistry llmProviderRegistry;
     private final VoiceInterviewPromptService promptService;
     private final ResumeRepository resumeRepository;
+    private final VoiceInterviewProperties voiceInterviewProperties;
 
-    public DashscopeLlmService(LlmProviderRegistry llmProviderRegistry, VoiceInterviewPromptService promptService, ResumeRepository resumeRepository) {
+    public DashscopeLlmService(LlmProviderRegistry llmProviderRegistry,
+                               VoiceInterviewPromptService promptService,
+                               ResumeRepository resumeRepository,
+                               VoiceInterviewProperties voiceInterviewProperties) {
         this.llmProviderRegistry = llmProviderRegistry;
         this.promptService = promptService;
         this.resumeRepository = resumeRepository;
+        this.voiceInterviewProperties = voiceInterviewProperties;
     }
 
     public String chat(String userInput, VoiceInterviewSessionEntity session, List<String> conversationHistory) {
@@ -67,11 +73,12 @@ public class DashscopeLlmService {
                 .call();
 
             String content = response.chatResponse().getResult().getOutput().getText();
+            String optimized = optimizeForVoice(content);
 
             log.info("LLM response generated for session {}: {}", session.getId(),
-                     content.substring(0, Math.min(100, content.length())));
+                     optimized.substring(0, Math.min(100, optimized.length())));
 
-            return content;
+            return optimized;
 
         } catch (Exception e) {
             log.error("LLM chat error for session {}: {}", session.getId(), e.getMessage(), e);
@@ -100,5 +107,35 @@ public class DashscopeLlmService {
         // MVP: Use synchronous version
         // TODO: Implement streaming in Phase 2 optimization
         return chat(userInput, session, conversationHistory);
+    }
+
+    private String optimizeForVoice(String content) {
+        if (content == null || content.isBlank()) {
+            return "请继续。";
+        }
+
+        String normalized = content
+            .replace("**", "")
+            .replace("```", "")
+            .replace("`", "")
+            .replaceAll("(?m)^\\s*[-*+]\\s*", "")
+            .replaceAll("\\s+", " ")
+            .trim();
+
+        int maxChars = Math.max(80, voiceInterviewProperties.getAiQuestionMaxChars());
+        if (normalized.length() <= maxChars) {
+            return normalized;
+        }
+
+        String truncated = normalized.substring(0, maxChars);
+        int lastTerminal = Math.max(
+            Math.max(truncated.lastIndexOf('。'), truncated.lastIndexOf('！')),
+            Math.max(truncated.lastIndexOf('？'), truncated.lastIndexOf('；'))
+        );
+        if (lastTerminal >= maxChars / 2) {
+            return truncated.substring(0, lastTerminal + 1);
+        }
+
+        return truncated + "…";
     }
 }

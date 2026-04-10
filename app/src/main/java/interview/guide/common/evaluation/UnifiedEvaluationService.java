@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 public class UnifiedEvaluationService {
 
     private static final Logger log = LoggerFactory.getLogger(UnifiedEvaluationService.class);
+    private static final int MAX_REFERENCE_CONTEXT_CHARS = 6000;
 
     private final PromptTemplate systemPromptTemplate;
     private final PromptTemplate userPromptTemplate;
@@ -41,6 +42,7 @@ public class UnifiedEvaluationService {
     private final BeanOutputConverter<SummaryDTO> summaryOutputConverter;
     private final StructuredOutputInvoker structuredOutputInvoker;
     private final int evaluationBatchSize;
+    private final ResourceLoader resourceLoader;
 
     // 批次评估结果
     private record BatchReportDTO(
@@ -73,19 +75,17 @@ public class UnifiedEvaluationService {
 
     public UnifiedEvaluationService(
             StructuredOutputInvoker structuredOutputInvoker,
-            @Value("classpath:prompts/interview-evaluation-system.st") Resource systemPromptResource,
-            @Value("classpath:prompts/interview-evaluation-user.st") Resource userPromptResource,
-            @Value("classpath:prompts/interview-evaluation-summary-system.st") Resource summarySystemPromptResource,
-            @Value("classpath:prompts/interview-evaluation-summary-user.st") Resource summaryUserPromptResource,
-            @Value("${app.interview.evaluation.batch-size:8}") int evaluationBatchSize) throws IOException {
+            ResourceLoader resourceLoader,
+            InterviewEvaluationProperties evaluationProperties) throws IOException {
         this.structuredOutputInvoker = structuredOutputInvoker;
-        this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
+        this.resourceLoader = resourceLoader;
+        this.systemPromptTemplate = new PromptTemplate(loadPrompt(evaluationProperties.getSystemPromptPath()));
+        this.userPromptTemplate = new PromptTemplate(loadPrompt(evaluationProperties.getUserPromptPath()));
         this.outputConverter = new BeanOutputConverter<>(BatchReportDTO.class);
-        this.summarySystemPromptTemplate = new PromptTemplate(summarySystemPromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.summaryUserPromptTemplate = new PromptTemplate(summaryUserPromptResource.getContentAsString(StandardCharsets.UTF_8));
+        this.summarySystemPromptTemplate = new PromptTemplate(loadPrompt(evaluationProperties.getSummarySystemPromptPath()));
+        this.summaryUserPromptTemplate = new PromptTemplate(loadPrompt(evaluationProperties.getSummaryUserPromptPath()));
         this.summaryOutputConverter = new BeanOutputConverter<>(SummaryDTO.class);
-        this.evaluationBatchSize = Math.max(1, evaluationBatchSize);
+        this.evaluationBatchSize = Math.max(1, evaluationProperties.getBatchSize());
     }
 
     /**
@@ -101,6 +101,14 @@ public class UnifiedEvaluationService {
                                      String sessionId,
                                      List<QaRecord> qaRecords,
                                      String resumeText) {
+        return evaluate(chatClient, sessionId, qaRecords, resumeText, null);
+    }
+
+    public EvaluationReport evaluate(ChatClient chatClient,
+                                     String sessionId,
+                                     List<QaRecord> qaRecords,
+                                     String resumeText,
+                                     String referenceContext) {
         log.info("开始评估面试: sessionId={}, 共{}题", sessionId, qaRecords.size());
 
         String resumeContext = resumeText != null ? resumeText : "";
@@ -108,9 +116,16 @@ public class UnifiedEvaluationService {
         if (resumeContext.length() > 3000) {
             resumeContext = resumeContext.substring(0, 3000) + "\n...(简历内容过长，已截断)";
         }
+        String referenceBaseline = referenceContext != null ? referenceContext.trim() : "";
+        if (referenceBaseline.length() > MAX_REFERENCE_CONTEXT_CHARS) {
+            referenceBaseline = referenceBaseline.substring(0, MAX_REFERENCE_CONTEXT_CHARS)
+                + "\n...(参考基线过长，已截断)";
+        }
 
         // 分批评估
-        List<BatchResult> batchResults = evaluateInBatches(chatClient, sessionId, resumeContext, qaRecords);
+        List<BatchResult> batchResults = evaluateInBatches(
+            chatClient, sessionId, resumeContext, qaRecords, referenceBaseline
+        );
 
         // 合并批次结果
         List<QuestionEvalDTO> mergedEvaluations = mergeQuestionEvaluations(batchResults);
@@ -120,7 +135,7 @@ public class UnifiedEvaluationService {
 
         // 二次汇总
         SummaryDTO summary = summarizeBatchResults(
-            chatClient, sessionId, resumeContext, qaRecords,
+            chatClient, sessionId, resumeContext, referenceBaseline, qaRecords,
             mergedEvaluations, fallbackFeedback, fallbackStrengths, fallbackImprovements
         );
 
@@ -128,26 +143,35 @@ public class UnifiedEvaluationService {
             summary.overallFeedback(), summary.strengths(), summary.improvements());
     }
 
+    private String loadPrompt(String path) throws IOException {
+        Resource resource = resourceLoader.getResource(path);
+        return resource.getContentAsString(StandardCharsets.UTF_8);
+    }
+
     private List<BatchResult> evaluateInBatches(ChatClient chatClient, String sessionId,
-                                                 String resumeContext, List<QaRecord> qaRecords) {
+                                                 String resumeContext, List<QaRecord> qaRecords,
+                                                 String referenceContext) {
         List<BatchResult> results = new ArrayList<>();
         for (int start = 0; start < qaRecords.size(); start += evaluationBatchSize) {
             int end = Math.min(start + evaluationBatchSize, qaRecords.size());
             List<QaRecord> batch = qaRecords.subList(start, end);
-            BatchReportDTO report = evaluateBatch(chatClient, sessionId, resumeContext, batch);
+            BatchReportDTO report = evaluateBatch(chatClient, sessionId, resumeContext, referenceContext, batch);
             results.add(new BatchResult(start, end, report));
         }
         return results;
     }
 
     private BatchReportDTO evaluateBatch(ChatClient chatClient, String sessionId,
-                                          String resumeContext, List<QaRecord> batch) {
+                                          String resumeContext, String referenceContext,
+                                          List<QaRecord> batch) {
         String qaRecords = buildQARecords(batch);
         String systemPrompt = systemPromptTemplate.render();
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("resumeText", resumeContext);
         variables.put("qaRecords", qaRecords);
+        variables.put("referenceContext",
+            (referenceContext != null && !referenceContext.isBlank()) ? referenceContext : "无");
         String userPrompt = userPromptTemplate.render(variables);
 
         String systemPromptWithFormat = systemPrompt + "\n\n" + outputConverter.getFormat();
@@ -222,13 +246,15 @@ public class UnifiedEvaluationService {
     }
 
     private SummaryDTO summarizeBatchResults(
-            ChatClient chatClient, String sessionId, String resumeContext,
+            ChatClient chatClient, String sessionId, String resumeContext, String referenceContext,
             List<QaRecord> qaRecords, List<QuestionEvalDTO> evaluations,
             String fallbackFeedback, List<String> fallbackStrengths, List<String> fallbackImprovements) {
         try {
             String summarySystem = summarySystemPromptTemplate.render();
             Map<String, Object> vars = new HashMap<>();
             vars.put("resumeText", resumeContext);
+            vars.put("referenceContext",
+                (referenceContext != null && !referenceContext.isBlank()) ? referenceContext : "无");
             vars.put("categorySummary", buildCategorySummary(qaRecords, evaluations));
             vars.put("questionHighlights", buildQuestionHighlights(qaRecords, evaluations));
             vars.put("fallbackOverallFeedback", fallbackFeedback);

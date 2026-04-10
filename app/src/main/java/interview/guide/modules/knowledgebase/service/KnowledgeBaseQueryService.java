@@ -8,8 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -64,30 +63,31 @@ public class KnowledgeBaseQueryService {
             KnowledgeBaseVectorService vectorService,
             KnowledgeBaseListService listService,
             KnowledgeBaseCountService countService,
-            @Value("classpath:prompts/knowledgebase-query-system.st") Resource systemPromptResource,
-            @Value("classpath:prompts/knowledgebase-query-user.st") Resource userPromptResource,
-            @Value("classpath:prompts/knowledgebase-query-rewrite.st") Resource rewritePromptResource,
-            @Value("${app.ai.rag.rewrite.enabled:true}") boolean rewriteEnabled,
-            @Value("${app.ai.rag.search.short-query-length:4}") int shortQueryLength,
-            @Value("${app.ai.rag.search.topk-short:20}") int topkShort,
-            @Value("${app.ai.rag.search.topk-medium:12}") int topkMedium,
-            @Value("${app.ai.rag.search.topk-long:8}") int topkLong,
-            @Value("${app.ai.rag.search.min-score-short:0.18}") double minScoreShort,
-            @Value("${app.ai.rag.search.min-score-default:0.28}") double minScoreDefault) throws IOException {
+            KnowledgeBaseQueryProperties queryProperties,
+            ResourceLoader resourceLoader) throws IOException {
         this.chatClient = chatClientBuilder.build();
         this.vectorService = vectorService;
         this.listService = listService;
         this.countService = countService;
-        this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.rewritePromptTemplate = new PromptTemplate(rewritePromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.rewriteEnabled = rewriteEnabled;
-        this.shortQueryLength = shortQueryLength;
-        this.topkShort = topkShort;
-        this.topkMedium = topkMedium;
-        this.topkLong = topkLong;
-        this.minScoreShort = minScoreShort;
-        this.minScoreDefault = minScoreDefault;
+        this.systemPromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(queryProperties.getSystemPromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
+        this.userPromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(queryProperties.getUserPromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
+        this.rewritePromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(queryProperties.getRewritePromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
+        this.rewriteEnabled = queryProperties.getRewrite().isEnabled();
+        this.shortQueryLength = queryProperties.getSearch().getShortQueryLength();
+        this.topkShort = queryProperties.getSearch().getTopkShort();
+        this.topkMedium = queryProperties.getSearch().getTopkMedium();
+        this.topkLong = queryProperties.getSearch().getTopkLong();
+        this.minScoreShort = queryProperties.getSearch().getMinScoreShort();
+        this.minScoreDefault = queryProperties.getSearch().getMinScoreDefault();
     }
 
     /**
@@ -458,4 +458,3 @@ public class KnowledgeBaseQueryService {
     private record QueryContext(String originalQuestion, List<String> candidateQueries, SearchParams searchParams) {
     }
 }
-

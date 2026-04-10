@@ -9,8 +9,8 @@ import com.alibaba.dashscope.audio.omni.OmniRealtimeTranscriptionParam;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -48,36 +48,40 @@ import java.util.function.Consumer;
 @Service
 public class QwenAsrService {
 
-    // Configuration fields (injected via @Value from application.yml or reflection in tests)
-    @Value("${app.voice-interview.qwen.asr.url}")
+    // Runtime configuration values (loaded from VoiceInterviewProperties; setters kept for tests)
     private String url;
 
-    @Value("${app.voice-interview.qwen.asr.model}")
     private String model;
 
-    @Value("${app.voice-interview.qwen.asr.api-key}")
     private String apiKey;
 
-    @Value("${app.voice-interview.qwen.asr.language}")
     private String language;
 
-    @Value("${app.voice-interview.qwen.asr.format}")
     private String format;
 
-    @Value("${app.voice-interview.qwen.asr.sample-rate}")
     private Integer sampleRate;
 
-    @Value("${app.voice-interview.qwen.asr.enable-turn-detection}")
     private Boolean enableTurnDetection;
 
-    @Value("${app.voice-interview.qwen.asr.turn-detection-type}")
     private String turnDetectionType;
 
-    @Value("${app.voice-interview.qwen.asr.turn-detection-threshold}")
     private Float turnDetectionThreshold;
 
-    @Value("${app.voice-interview.qwen.asr.turn-detection-silence-duration-ms}")
     private Integer turnDetectionSilenceDurationMs;
+
+    public QwenAsrService(VoiceInterviewProperties voiceInterviewProperties) {
+        VoiceInterviewProperties.AsrConfig asr = voiceInterviewProperties.getQwen().getAsr();
+        this.url = asr.getUrl();
+        this.model = asr.getModel();
+        this.apiKey = asr.getApiKey();
+        this.language = asr.getLanguage();
+        this.format = asr.getFormat();
+        this.sampleRate = asr.getSampleRate();
+        this.enableTurnDetection = asr.isEnableTurnDetection();
+        this.turnDetectionType = asr.getTurnDetectionType();
+        this.turnDetectionThreshold = asr.getTurnDetectionThreshold();
+        this.turnDetectionSilenceDurationMs = asr.getTurnDetectionSilenceDurationMs();
+    }
 
     /**
      * Active ASR sessions map.
@@ -96,7 +100,7 @@ public class QwenAsrService {
     /**
      * Initialize the ASR service.
      * This method is automatically called by Spring after the service is constructed
-     * and all configuration values have been injected via @Value annotations.
+     * and all configuration values have been loaded from VoiceInterviewProperties.
      *
      * @throws IllegalStateException if apiKey is not configured
      */
