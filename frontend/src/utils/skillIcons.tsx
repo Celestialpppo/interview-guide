@@ -10,6 +10,7 @@ import {
   TbMathFunction,
   TbTopologyStarRing3,
   TbSparkles,
+  TbTestPipe,
 } from 'react-icons/tb';
 
 /**
@@ -21,10 +22,11 @@ const SKILL_ICON_MAP: Record<string, IconType> = {
   'java-backend': SiOpenjdk,
   'frontend': SiReact,
   'python-backend': SiPython,
-  'algorithm-bytedance': SiBytedance,
-  'system-design-ali': SiAlibabadotcom,
+  'bytedance-backend': SiBytedance,
+  'ali-backend': SiAlibabadotcom,
   'algorithm': TbMathFunction,
   'system-design': TbTopologyStarRing3,
+  'test-development': TbTestPipe,
   'custom': TbSparkles,
 };
 

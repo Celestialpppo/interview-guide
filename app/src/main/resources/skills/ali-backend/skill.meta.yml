@@ -36,7 +36,7 @@ categories:
   - key: CACHE
     label: 缓存
     priority: NORMAL
-    ref: cache-general.md
+    ref: redis.md
     shared: true
   - key: MQ
     label: 消息队列

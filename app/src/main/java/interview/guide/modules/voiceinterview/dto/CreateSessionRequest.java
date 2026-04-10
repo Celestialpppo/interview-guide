@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CreateSessionRequest {
     private String roleType; // 向后兼容，新请求可不传（服务层会用 skillId 填充）
-    private String skillId;  // 模板 ID，如 "java-backend", "algorithm-bytedance" 等
+    private String skillId;  // 模板 ID，如 "java-backend", "bytedance-backend" 等
     private String difficulty; // "junior", "mid", "senior"
     private String customJdText;
     private Long resumeId;

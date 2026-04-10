@@ -1,5 +1,5 @@
 ---
-name: algorithm-bytedance
+name: bytedance-backend
 description: 用于字节后端面试出题；以算法与编码能力为第一门槛，同时考察高并发场景下的系统设计能力。
 ---
 # Overview

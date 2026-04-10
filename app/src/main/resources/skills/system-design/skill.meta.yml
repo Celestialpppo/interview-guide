@@ -23,7 +23,7 @@ categories:
   - key: CACHE
     label: 缓存
     priority: NORMAL
-    ref: cache-general.md
+    ref: redis.md
     shared: true
   - key: DESIGN_PATTERN
     label: 设计模式

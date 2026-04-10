@@ -166,7 +166,7 @@ public class VoiceInterviewProperties {
     @Data
     public static class OpeningConfig {
         private Map<String, String> skillQuestions = new LinkedHashMap<>();
-        private List<String> algorithmSkills = List.of("algorithm-bytedance", "algorithm");
+        private List<String> algorithmSkills = List.of("bytedance-backend", "algorithm");
         private String algorithmQuestion =
             "你好，我是本场面试官。先做一道算法与数据结构热身题：请你从“哈希表/堆/栈/队列/树/图”里选两个，结合一道你熟悉的题，口述“为什么选这个结构、核心步骤、时间复杂度、空间复杂度、边界条件与反例”。本场不需要写代码，重点看你的思路和取舍。";
         private String backendQuestion =
