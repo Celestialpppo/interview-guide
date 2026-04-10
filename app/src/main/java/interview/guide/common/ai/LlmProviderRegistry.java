@@ -1,10 +1,16 @@
 package interview.guide.common.ai;
 
 import interview.guide.common.config.LlmProviderProperties;
+import interview.guide.common.config.LlmProviderProperties.AdvisorConfig;
 import interview.guide.common.config.LlmProviderProperties.ProviderConfig;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
+import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
+import org.springframework.ai.chat.client.advisor.api.Advisor;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -17,6 +23,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -128,8 +136,51 @@ public class LlmProviderRegistry {
         if (interviewSkillsToolCallback != null) {
             builder.defaultToolCallbacks(interviewSkillsToolCallback);
         }
+        List<Advisor> advisors = buildDefaultAdvisors(providerId);
+        if (!advisors.isEmpty()) {
+            builder.defaultAdvisors(advisors);
+            log.info("[LlmProviderRegistry] Applied {} advisors for provider {}", advisors.size(), providerId);
+        }
 
         // Build and return the ChatClient
         return builder.build();
+    }
+
+    private List<Advisor> buildDefaultAdvisors(String providerId) {
+        AdvisorConfig config = properties.getAdvisors();
+        if (config == null || !config.isEnabled()) {
+            return List.of();
+        }
+
+        List<Advisor> advisors = new ArrayList<>();
+
+        if (config.isToolCallEnabled()) {
+            if (toolCallingManager != null) {
+                ToolCallAdvisor toolCallAdvisor = ToolCallAdvisor.builder()
+                    .toolCallingManager(toolCallingManager)
+                    .conversationHistoryEnabled(config.isToolCallConversationHistoryEnabled())
+                    .streamToolCallResponses(config.isStreamToolCallResponses())
+                    .build();
+                advisors.add(toolCallAdvisor);
+            } else {
+                log.warn("[LlmProviderRegistry] ToolCallAdvisor skipped: ToolCallingManager unavailable, provider={}", providerId);
+            }
+        }
+
+        if (config.isMessageChatMemoryEnabled()) {
+            int maxMessages = Math.max(20, config.getMessageChatMemoryMaxMessages());
+            MessageChatMemoryAdvisor memoryAdvisor = MessageChatMemoryAdvisor.builder(
+                MessageWindowChatMemory.builder()
+                    .maxMessages(maxMessages)
+                    .build()
+            ).build();
+            advisors.add(memoryAdvisor);
+        }
+
+        if (config.isSimpleLoggerEnabled()) {
+            advisors.add(SimpleLoggerAdvisor.builder().build());
+        }
+
+        return advisors;
     }
 }

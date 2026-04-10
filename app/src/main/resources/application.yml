@@ -114,10 +114,26 @@ app:
         base-url: http://localhost:1234
         api-key: lm-studio
         model: qwen2.5-7b-instruct
+    advisors:
+      enabled: ${APP_AI_ADVISORS_ENABLED:true}
+      tool-call-enabled: ${APP_AI_ADVISORS_TOOL_CALL_ENABLED:true}
+      tool-call-conversation-history-enabled: ${APP_AI_ADVISORS_TOOL_CALL_CONVERSATION_HISTORY_ENABLED:false}
+      stream-tool-call-responses: ${APP_AI_ADVISORS_STREAM_TOOL_CALL_RESPONSES:false}
+      message-chat-memory-enabled: ${APP_AI_ADVISORS_MESSAGE_CHAT_MEMORY_ENABLED:false}
+      message-chat-memory-max-messages: ${APP_AI_ADVISORS_MESSAGE_CHAT_MEMORY_MAX_MESSAGES:120}
+      simple-logger-enabled: ${APP_AI_ADVISORS_SIMPLE_LOGGER_ENABLED:false}
     # 结构化输出重试次数（用于 BeanOutputConverter 解析失败时的业务层重试）
     structured-max-attempts: ${APP_AI_STRUCTURED_MAX_ATTEMPTS:2}
     # 重试时是否将上次错误原因注入提示词，帮助模型定向修复输出
     structured-include-last-error: ${APP_AI_STRUCTURED_INCLUDE_LAST_ERROR:true}
+    # 是否启用“修复型重试提示词”（关闭后每次重试沿用原始 system prompt）
+    structured-retry-use-repair-prompt: ${APP_AI_STRUCTURED_RETRY_USE_REPAIR_PROMPT:true}
+    # 修复型重试提示词中是否追加严格 JSON 指令
+    structured-retry-append-strict-json-instruction: ${APP_AI_STRUCTURED_RETRY_APPEND_STRICT_JSON_INSTRUCTION:true}
+    # 注入到重试提示词中的错误信息最大长度
+    structured-error-message-max-length: ${APP_AI_STRUCTURED_ERROR_MESSAGE_MAX_LENGTH:200}
+    # 是否开启结构化输出调用指标（invocations/attempts/latency）
+    structured-metrics-enabled: ${APP_AI_STRUCTURED_METRICS_ENABLED:true}
     rag:
       rewrite:
         enabled: ${APP_AI_RAG_REWRITE_ENABLED:true}
