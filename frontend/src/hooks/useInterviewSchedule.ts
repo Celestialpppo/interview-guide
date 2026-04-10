@@ -1,7 +1,6 @@
 // frontend/src/hooks/useInterviewSchedule.ts
 
 import { useState, useEffect, useCallback } from 'react';
-import dayjs from 'dayjs';
 import { interviewScheduleApi } from '../api/interviewSchedule';
 import type {
   InterviewSchedule,

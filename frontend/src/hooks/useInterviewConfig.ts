@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { skillApi, type SkillDTO, type CategoryDTO } from '../api/skill';
 import { historyApi, type ResumeListItem } from '../api/history';
 import { getSkillIcon } from '../utils/skillIcons';
+import { loadInterviewPreferences } from '../utils/interviewPreferences';
 
 export type InterviewMode = 'text' | 'voice';
 export type Difficulty = 'junior' | 'mid' | 'senior';
@@ -25,6 +26,7 @@ export interface InterviewConfigState {
   showMore: boolean;
   resumeId: number | undefined;
   resumes: ResumeListItem[];
+  llmProvider: string;
   questionCount: number;
   plannedDuration: number;
   customJdText: string;
@@ -38,6 +40,7 @@ export function useInterviewConfig(options?: {
   autoLoad?: boolean;
 }) {
   const { defaultMode = 'text', defaultResumeId, autoLoad = true } = options ?? {};
+  const preferences = loadInterviewPreferences();
 
   const [mode, setMode] = useState<InterviewMode>(defaultMode);
   const [skillId, setSkillId] = useState(DEFAULT_SKILL_ID);
@@ -47,8 +50,9 @@ export function useInterviewConfig(options?: {
   const [showMore, setShowMore] = useState(false);
   const [resumeId, setResumeId] = useState<number | undefined>(undefined);
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
-  const [questionCount, setQuestionCount] = useState(6);
+  const [questionCount, setQuestionCount] = useState<number>(6);
   const [plannedDuration, setPlannedDuration] = useState(30);
+  const [llmProvider, setLlmProvider] = useState(preferences.defaultLlmProvider);
   const [customJdText, setCustomJdText] = useState('');
   const [customCategories, setCustomCategories] = useState<CategoryDTO[]>([]);
   const [parsingJd, setParsingJd] = useState(false);
@@ -119,6 +123,7 @@ export function useInterviewConfig(options?: {
     resumes,
     questionCount, setQuestionCount,
     plannedDuration, setPlannedDuration,
+    llmProvider, setLlmProvider,
     customJdText, setCustomJdText,
     customCategories,
     parsingJd,

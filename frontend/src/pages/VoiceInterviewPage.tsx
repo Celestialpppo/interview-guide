@@ -61,6 +61,15 @@ export default function VoiceInterviewPage() {
   const blockMicToServerRef = useRef(false);
   const lastAiCommittedTextRef = useRef('');
   const pendingAiTextCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Chunked audio playback refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const chunkQueueRef = useRef<AudioBuffer[]>([]);
+  const isChunkPlayingRef = useRef(false);
+  const chunkPlaybackSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const drainCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref to track latest aiText for async callbacks (avoids stale closure)
+  const aiTextRef = useRef('');
+  useEffect(() => { aiTextRef.current = aiText; }, [aiText]);
 
   const clearPendingAiTextCommit = useCallback(() => {
     if (pendingAiTextCommitRef.current) {
@@ -89,6 +98,90 @@ export default function VoiceInterviewPage() {
     setAiText(prev => prev?.trim() === normalized ? '' : prev);
   }, []);
 
+  // --- Chunked audio playback via AudioContext ---
+  const getAudioContext = useCallback(() => {
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+      audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+    }
+    return audioContextRef.current;
+  }, []);
+
+  const playNextChunk = useCallback(() => {
+    if (chunkQueueRef.current.length === 0) {
+      isChunkPlayingRef.current = false;
+      return;
+    }
+    isChunkPlayingRef.current = true;
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    const buffer = chunkQueueRef.current.shift()!;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    chunkPlaybackSourceRef.current = source;
+    source.onended = () => {
+      chunkPlaybackSourceRef.current = null;
+      playNextChunk();
+    };
+    source.start(0);
+  }, [getAudioContext]);
+
+  const handleAudioChunk = useCallback((base64Wav: string, _index: number, isLast: boolean) => {
+    try {
+      const binaryStr = atob(base64Wav);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const pcmOffset = 44;
+      const pcmData = new Int16Array(bytes.buffer, pcmOffset, (bytes.length - pcmOffset) / 2);
+      const float32 = new Float32Array(pcmData.length);
+      for (let i = 0; i < pcmData.length; i++) {
+        float32[i] = pcmData[i] / 32768.0;
+      }
+
+      const ctx = getAudioContext();
+      const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+
+      chunkQueueRef.current.push(audioBuffer);
+      if (!isChunkPlayingRef.current) {
+        playNextChunk();
+      }
+
+      setIsAiSpeaking(true);
+      blockMicToServerRef.current = true;
+
+      if (isLast) {
+        const startedAt = Date.now();
+        const MAX_DRAIN_WAIT_MS = 30_000;
+        if (drainCheckRef.current) {
+          clearInterval(drainCheckRef.current);
+        }
+        drainCheckRef.current = setInterval(() => {
+          if (chunkQueueRef.current.length === 0 && !isChunkPlayingRef.current) {
+            clearInterval(drainCheckRef.current!);
+            drainCheckRef.current = null;
+            setIsAiSpeaking(false);
+            blockMicToServerRef.current = false;
+            clearPendingAiTextCommit();
+            commitAiMessage(aiTextRef.current.trim());
+            setAiText('');
+          } else if (Date.now() - startedAt > MAX_DRAIN_WAIT_MS) {
+            clearInterval(drainCheckRef.current!);
+            drainCheckRef.current = null;
+            setIsAiSpeaking(false);
+            blockMicToServerRef.current = false;
+          }
+        }, 100);
+      }
+    } catch (e) {
+      console.error('[ChunkAudio] Decode/play error:', e);
+    }
+  }, [getAudioContext, playNextChunk, clearPendingAiTextCommit, commitAiMessage]);
+
   // Load skills for template name display
   useEffect(() => {
     skillApi.listSkills().then(setSkills).catch(console.error);
@@ -109,6 +202,12 @@ export default function VoiceInterviewPage() {
       }
       if (wsRef.current) {
         wsRef.current.disconnect();
+      }
+      chunkPlaybackSourceRef.current?.stop();
+      audioContextRef.current?.close();
+      if (drainCheckRef.current) {
+        clearInterval(drainCheckRef.current);
+        drainCheckRef.current = null;
       }
       clearPendingAiTextCommit();
     };
@@ -255,6 +354,9 @@ export default function VoiceInterviewPage() {
                 clearPendingAiTextCommit();
                 setError('WebSocket 连接错误，请检查网络后重试');
                 setConnectionStatus('disconnected');
+              },
+              onAudioChunk: (data, index, isLast) => {
+                handleAudioChunk(data, index, isLast);
               },
             }
           );

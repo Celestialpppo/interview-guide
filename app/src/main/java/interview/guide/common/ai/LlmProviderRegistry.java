@@ -138,7 +138,7 @@ public class LlmProviderRegistry {
         }
         List<Advisor> advisors = buildDefaultAdvisors(providerId);
         if (!advisors.isEmpty()) {
-            builder.defaultAdvisors(advisors);
+            builder.defaultAdvisors(advisors.toArray(new Advisor[0]));
             log.info("[LlmProviderRegistry] Applied {} advisors for provider {}", advisors.size(), providerId);
         }
 
@@ -178,7 +178,7 @@ public class LlmProviderRegistry {
         }
 
         if (config.isSimpleLoggerEnabled()) {
-            advisors.add(SimpleLoggerAdvisor.builder().build());
+            advisors.add(new SimpleLoggerAdvisor());
         }
 
         return advisors;

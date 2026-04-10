@@ -68,8 +68,6 @@ export const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
       if (eventStart.isValid() && eventEnd.isValid()) {
         const startHour = eventStart.hour();
         const endHour = eventEnd.hour();
-        const endMinute = eventEnd.minute();
-        
         // Adjust minHour for early morning interviews
         if (startHour < minHour) {
           minHour = Math.max(0, startHour);

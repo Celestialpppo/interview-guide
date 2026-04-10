@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +62,9 @@ public class VoiceInterviewService {
     @Transactional
     public SessionResponseDTO createSession(CreateSessionRequest request) {
         String effectiveSkillId = request.getSkillId() != null ? request.getSkillId() : InterviewDefaults.SKILL_ID;
+        String effectiveLlmProvider = (request.getLlmProvider() != null && !request.getLlmProvider().isBlank())
+            ? request.getLlmProvider()
+            : properties.getLlmProvider();
 
         VoiceInterviewSessionEntity session = VoiceInterviewSessionEntity.builder()
                 .userId(DEFAULT_USER_ID)
@@ -75,7 +77,7 @@ public class VoiceInterviewService {
                 .techEnabled(request.getTechEnabled())
                 .projectEnabled(request.getProjectEnabled())
                 .hrEnabled(request.getHrEnabled())
-                .llmProvider(request.getLlmProvider())
+                .llmProvider(effectiveLlmProvider)
                 .plannedDuration(request.getPlannedDuration())
                 .currentPhase(determineFirstPhase(request))
                 .build();
@@ -522,7 +524,7 @@ public class VoiceInterviewService {
     private void cacheSession(VoiceInterviewSessionEntity session) {
         String cacheKey = getSessionCacheKey(session.getId());
         RBucket<VoiceInterviewSessionEntity> bucket = redissonClient.getBucket(cacheKey);
-        bucket.set(session, CACHE_TTL_HOURS, TimeUnit.HOURS);
+        bucket.set(session, Duration.ofHours(CACHE_TTL_HOURS));
         log.debug("Cached session: {}", session.getId());
     }
 

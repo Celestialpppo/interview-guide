@@ -120,17 +120,26 @@ export interface WebSocketTextMessage {
   content: string;
 }
 
+export interface WebSocketAudioChunkMessage {
+  type: 'audio_chunk';
+  data: string; // Base64 WAV
+  index: number;
+  isLast: boolean;
+}
+
 export type WebSocketMessage =
   | WebSocketAudioMessage
   | WebSocketSubtitleMessage
   | WebSocketAudioResponseMessage
-  | WebSocketTextMessage;
+  | WebSocketTextMessage
+  | WebSocketAudioChunkMessage;
 
 // WebSocket 事件处理器
 export interface WebSocketEventHandlers {
   onMessage?: (message: WebSocketMessage) => void;
   onSubtitle?: (text: string, isFinal: boolean) => void;
   onAudioResponse?: (audioData: string, text: string) => void;
+  onAudioChunk?: (data: string, index: number, isLast: boolean) => void;
   onOpen?: () => void;
   onClose?: (event: CloseEvent) => void;
   onError?: (error: Event) => void;
@@ -288,6 +297,12 @@ export class VoiceInterviewWebSocket {
               if ('text' in message) {
                 const audioMsg = message as WebSocketAudioResponseMessage;
                 this.handlers.onAudioResponse?.(audioMsg.data, audioMsg.text);
+              }
+              break;
+            case 'audio_chunk':
+              if ('index' in message) {
+                const chunkMsg = message as WebSocketAudioChunkMessage;
+                this.handlers.onAudioChunk?.(chunkMsg.data, chunkMsg.index, chunkMsg.isLast);
               }
               break;
             case 'text':

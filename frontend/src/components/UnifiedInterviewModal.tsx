@@ -4,7 +4,7 @@ import {
   X, Sparkles, FileText, Mic,
   FileStack, ChevronDown, ChevronUp, Loader2
 } from 'lucide-react';
-import { useInterviewConfig, DEFAULT_LLM_PROVIDER, DIFFICULTY_OPTIONS, type InterviewMode, type Difficulty } from '../hooks/useInterviewConfig';
+import { useInterviewConfig, DIFFICULTY_OPTIONS, type InterviewMode, type Difficulty } from '../hooks/useInterviewConfig';
 import { getSkillIcon } from '../utils/skillIcons';
 
 // Re-export for backward compatibility
@@ -74,7 +74,7 @@ export default function UnifiedInterviewModal({
       skillName: selectedSkill?.name || '自定义',
       difficulty: config.difficulty,
       resumeId: config.resumeId,
-      llmProvider: DEFAULT_LLM_PROVIDER,
+      llmProvider: config.llmProvider,
       questionCount: config.questionCount,
       techEnabled: true,
       projectEnabled: true,

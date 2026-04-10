@@ -2,6 +2,7 @@ package interview.guide.modules.voiceinterview.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import interview.guide.modules.voiceinterview.dto.WebSocketControlMessage;
 import interview.guide.modules.voiceinterview.dto.WebSocketSubtitleMessage;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
@@ -15,6 +16,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -28,10 +30,14 @@ import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -56,11 +62,17 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     private final DashscopeLlmService llmService;
     private final VoiceInterviewService interviewService;
     private final VoiceInterviewProperties voiceInterviewProperties;
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
 
     /**
      * 合并多段 STT 定稿后再触发 LLM 的延迟调度（与 {@link VoiceInterviewProperties#getUserUtteranceDebounceMs()} 配合）
      */
     private final ScheduledExecutorService utteranceMergeScheduler = createUtteranceMergeScheduler();
+
+    /**
+     * LLM / TTS / JDBC 等阻塞工作全部跑在虚拟线程上，避免占满 utteranceMergeScheduler 的 2 个调度线程。
+     */
+    private final ExecutorService voicePipelineExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, SessionState> sessionStates = new ConcurrentHashMap<>();
@@ -91,8 +103,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
     @PostConstruct
     void warmupOpeningAudioCache() {
-        // 异步预热，不阻塞应用启动
-        utteranceMergeScheduler.execute(() -> {
+        voicePipelineExecutor.execute(() -> {
             try {
                 VoiceInterviewProperties.OpeningConfig opening = voiceInterviewProperties.getOpening();
                 if (opening == null) {
@@ -190,7 +201,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     }
 
     private void triggerOpeningQuestionIfNeeded(String sessionId, WebSocketSession session) {
-        utteranceMergeScheduler.execute(() -> {
+        voicePipelineExecutor.execute(() -> {
             try {
                 if (session == null || !session.isOpen()) {
                     return;
@@ -284,7 +295,6 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String sessionId = extractSessionId(session);
 
-        // ⚠️ CRITICAL: Log message size for debugging
         int messageSize = message.getPayload().length();
         int messageSizeKB = messageSize / 1024;
         log.info("[WebSocket] Received message: sessionId={}, size={}KB ({} bytes), limit={}KB",
@@ -331,7 +341,15 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
     @Override
     public void destroy() {
+        voicePipelineExecutor.shutdownNow();
         utteranceMergeScheduler.shutdownNow();
+        try {
+            if (!voicePipelineExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("voicePipelineExecutor did not terminate within 5s");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override
@@ -342,6 +360,10 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             SessionState removedState = sessionStates.remove(sessionId);
             if (removedState != null) {
                 removedState.cancelPendingUtteranceFlush();
+                Thread t = removedState.getProcessingThread();
+                if (t != null) {
+                    t.interrupt();
+                }
             }
             lastActivityTime.remove(sessionId);
 
@@ -470,6 +492,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         }
 
         log.debug("STT final segment for session {}: {}", sessionId, recognizedText);
+        incrementCounter("app.voice.interview.asr.final_segments", "status", "received");
 
         // 合并多次 VAD 切段，防抖后再统一触发面试官回复（避免句中停顿就一问一答）
         state.appendFinalSttSegment(recognizedText);
@@ -507,28 +530,40 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                     TimeUnit.MILLISECONDS);
             return;
         }
-        try {
         String userText = state.getMergeBufferPreview();
         if (userText == null || userText.trim().isEmpty()) {
+            state.isProcessing().set(false);
             return;
         }
         if (shouldDelayCommit(state, userText)) {
+            state.isProcessing().set(false);
             utteranceMergeScheduler.schedule(
                     () -> flushMergedUtteranceToLlm(sessionId),
                     500,
                     TimeUnit.MILLISECONDS);
             return;
         }
+        long mergeStartAt = state.getMergeStartedAt();
         userText = state.takeMergeBufferAndClear();
         if (userText == null || userText.trim().isEmpty()) {
+            state.isProcessing().set(false);
             return;
         }
+        long mergeWaitMs = Math.max(0, System.currentTimeMillis() - mergeStartAt);
+        recordTimerMillis("app.voice.interview.asr.merge_wait", mergeWaitMs, "status", "success");
         state.setAccumulatedText(userText);
         log.info("Merged user utterance for session {}, triggering LLM (length {})", sessionId, userText.length());
-        triggerLlmResponse(sessionId, session, state);
-        } finally {
-            state.isProcessing().set(false);
-        }
+
+        // 提交到虚拟线程执行阻塞的 LLM+TTS 管线，立即释放调度器线程
+        voicePipelineExecutor.execute(() -> {
+            state.setProcessingThread(Thread.currentThread());
+            try {
+                triggerLlmResponse(sessionId, session, state);
+            } finally {
+                state.isProcessing().set(false);
+                state.setProcessingThread(null);
+            }
+        });
     }
 
     private boolean shouldDelayCommit(SessionState state, String text) {
@@ -556,11 +591,13 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
 
     /**
-     * Trigger LLM response for completed sentence
+     * Trigger LLM response for completed sentence.
+     * When streaming is enabled, uses sentence-level TTS overlap: each detected sentence
+     * triggers a concurrent TTS call, so TTS runs in parallel with the rest of LLM generation.
      */
     private void triggerLlmResponse(String sessionId, WebSocketSession session, SessionState state) {
+        long turnStartNanos = System.nanoTime();
         try {
-            // Check if WebSocket is still open
             if (!session.isOpen()) {
                 log.warn("WebSocket session is closed, skipping LLM response for session {}", sessionId);
                 return;
@@ -574,7 +611,6 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
             log.info("Getting LLM response for session {}, text: {}", sessionId, userText);
 
-            // Get LLM response
             VoiceInterviewSessionEntity sessionEntity = getSessionEntity(sessionId);
             if (sessionEntity == null) {
                 log.error("Session entity not found for session {}, cannot generate LLM response", sessionId);
@@ -582,54 +618,166 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                 return;
             }
 
-            // Load conversation history for context
             List<String> conversationHistory = getHistory(sessionId);
 
-            String aiReply = llmService.chat(userText, sessionEntity, conversationHistory);
-            log.info("LLM response for session {}: '{}'", sessionId, aiReply);
+            long llmStartNanos = System.nanoTime();
+            AtomicLong firstTokenAtNanos = new AtomicLong(0);
+            boolean streamEnabled = voiceInterviewProperties.isLlmStreamingEnabled();
+            String aiReply;
 
-            // Check again if session is still open before sending
-            if (!session.isOpen()) {
-                log.warn("WebSocket closed during LLM processing, discarding response for session {}", sessionId);
-                return;
-            }
+            if (streamEnabled) {
+                // 句子级并发 TTS：LLM 流式输出期间每检测到一个完整句子就启动 TTS
+                Semaphore ttsSemaphore = new Semaphore(
+                    Math.max(1, voiceInterviewProperties.getMaxConcurrentTtsPerSession()));
+                List<CompletableFuture<byte[]>> ttsFutures = new ArrayList<>();
 
-            // Send final subtitle
-            sendSubtitle(session, userText, true);
+                aiReply = llmService.chatStreamSentences(
+                    userText,
+                    partialText -> {
+                        if (partialText == null || partialText.isBlank() || !session.isOpen()) {
+                            return;
+                        }
+                        if (firstTokenAtNanos.compareAndSet(0L, System.nanoTime())) {
+                            recordTimerSinceNanos(
+                                "app.voice.interview.llm.first_token_latency",
+                                llmStartNanos,
+                                "status", "success"
+                            );
+                        }
+                        sendTextMessage(session, partialText);
+                    },
+                    sentence -> {
+                        if (sentence == null || sentence.isBlank()) {
+                            return;
+                        }
+                        ttsSemaphore.acquireUninterruptibly();
+                        CompletableFuture<byte[]> future = CompletableFuture.supplyAsync(() -> {
+                            try {
+                                return ttsService.synthesize(sentence);
+                            } finally {
+                                ttsSemaphore.release();
+                            }
+                        }, voicePipelineExecutor);
+                        ttsFutures.add(future);
+                    },
+                    sessionEntity,
+                    conversationHistory
+                );
 
-            // 先下发文本并落库，确保即使 TTS 卡顿/失败，前端也能收到面试官消息，评估也有对话记录
-            sendTextMessage(session, aiReply);
-            saveMessage(sessionId, userText, aiReply);
+                recordTimerSinceNanos("app.voice.interview.llm.duration", llmStartNanos, "status", "success");
+                incrementCounter("app.voice.interview.llm.calls", "status", "success", "streaming", "true");
+                log.info("LLM response for session {}: '{}'", sessionId, aiReply);
 
-            // TTS synthesis
-            log.info("[Session: {}] Starting TTS synthesis for text (length: {}): '{}'",
-                    sessionId, aiReply.length(), aiReply.substring(0, Math.min(50, aiReply.length())));
-            byte[] aiAudio = ttsService.synthesize(aiReply);
-            log.info("[Session: {}] TTS synthesis completed, PCM audio size: {} bytes",
-                    sessionId, aiAudio != null ? aiAudio.length : 0);
+                if (!session.isOpen()) {
+                    log.warn("WebSocket closed during LLM processing, discarding response for session {}", sessionId);
+                    return;
+                }
 
-            // Final check before sending audio
-            if (!session.isOpen()) {
-                log.warn("WebSocket closed during TTS processing, discarding audio for session {}", sessionId);
-                return;
-            }
+                sendSubtitle(session, userText, true);
+                sendTextMessage(session, aiReply);
+                saveMessage(sessionId, userText, aiReply);
 
-            if (aiAudio == null || aiAudio.length == 0) {
-                log.error("[Session: {}] TTS returned empty audio for text (length: {}), falling back to text-only response",
-                        sessionId, aiReply.length());
+                // 按顺序收集所有 TTS 结果
+                if (!ttsFutures.isEmpty()) {
+                    long ttsStartNanos = System.nanoTime();
+                    boolean chunkedEnabled = voiceInterviewProperties.isChunkedAudioEnabled();
+
+                    if (chunkedEnabled) {
+                        // 分块推送模式：每句 TTS 完成后立即推送
+                        for (int i = 0; i < ttsFutures.size(); i++) {
+                            try {
+                                byte[] pcm = ttsFutures.get(i).get();
+                                if (pcm != null && pcm.length > 0 && session.isOpen()) {
+                                    byte[] wavAudio = convertPcmToWav(pcm);
+                                    sendAudioChunk(session, wavAudio, i, i == ttsFutures.size() - 1);
+                                }
+                            } catch (Exception e) {
+                                log.warn("[Session: {}] TTS chunk {} failed: {}", sessionId, i, e.getMessage());
+                            }
+                        }
+                        recordTimerSinceNanos("app.voice.interview.tts.duration", ttsStartNanos, "status", "success");
+                    } else {
+                        // 合并模式：收集所有 PCM 后合并为一个完整音频
+                        List<byte[]> pcmChunks = new ArrayList<>();
+                        int totalSize = 0;
+                        for (CompletableFuture<byte[]> f : ttsFutures) {
+                            try {
+                                byte[] pcm = f.get();
+                                if (pcm != null && pcm.length > 0) {
+                                    pcmChunks.add(pcm);
+                                    totalSize += pcm.length;
+                                }
+                            } catch (Exception e) {
+                                log.warn("[Session: {}] TTS future failed for one sentence: {}", sessionId, e.getMessage());
+                            }
+                        }
+                        recordTimerSinceNanos("app.voice.interview.tts.duration", ttsStartNanos, "status", "success");
+
+                        if (!session.isOpen()) {
+                            log.warn("WebSocket closed during TTS processing, discarding audio for session {}", sessionId);
+                            return;
+                        }
+
+                        if (totalSize > 0) {
+                            byte[] mergedPcm = new byte[totalSize];
+                            int offset = 0;
+                            for (byte[] chunk : pcmChunks) {
+                                System.arraycopy(chunk, 0, mergedPcm, offset, chunk.length);
+                                offset += chunk.length;
+                            }
+                            byte[] wavAudio = convertPcmToWav(mergedPcm);
+                            log.info("[Session: {}] Sending merged audio - {} sentences, WAV size: {} bytes",
+                                sessionId, pcmChunks.size(), wavAudio.length);
+                            sendAudio(session, wavAudio, aiReply);
+                        } else {
+                            log.error("[Session: {}] All TTS calls returned empty audio", sessionId);
+                            incrementCounter("app.voice.interview.tts.empty_audio", "status", "empty");
+                        }
+                    }
+                }
             } else {
-                // Convert PCM to WAV format for browser playback
-                byte[] wavAudio = convertPcmToWav(aiAudio);
-                log.info("[Session: {}] Sending audio to client - WAV size: {} bytes, text: '{}'",
-                        sessionId, wavAudio.length, aiReply.substring(0, Math.min(50, aiReply.length())));
-                sendAudio(session, wavAudio, aiReply);
+                aiReply = llmService.chat(userText, sessionEntity, conversationHistory);
+                recordTimerSinceNanos("app.voice.interview.llm.duration", llmStartNanos, "status", "success");
+                incrementCounter("app.voice.interview.llm.calls", "status", "success", "streaming", "false");
+                log.info("LLM response for session {}: '{}'", sessionId, aiReply);
+
+                if (!session.isOpen()) {
+                    log.warn("WebSocket closed during LLM processing, discarding response for session {}", sessionId);
+                    return;
+                }
+
+                sendSubtitle(session, userText, true);
+                sendTextMessage(session, aiReply);
+                saveMessage(sessionId, userText, aiReply);
+
+                long ttsStartNanos = System.nanoTime();
+                log.info("[Session: {}] Starting TTS synthesis for text (length: {})",
+                    sessionId, aiReply.length());
+                byte[] aiAudio = ttsService.synthesize(aiReply);
+                recordTimerSinceNanos("app.voice.interview.tts.duration", ttsStartNanos, "status", "success");
+
+                if (!session.isOpen()) {
+                    return;
+                }
+
+                if (aiAudio == null || aiAudio.length == 0) {
+                    log.error("[Session: {}] TTS returned empty audio", sessionId);
+                    incrementCounter("app.voice.interview.tts.empty_audio", "status", "empty");
+                } else {
+                    byte[] wavAudio = convertPcmToWav(aiAudio);
+                    sendAudio(session, wavAudio, aiReply);
+                }
             }
 
-            // Clear accumulated text for next utterance
             state.setAccumulatedText("");
+            recordTimerSinceNanos("app.voice.interview.turn.duration", turnStartNanos, "status", "success");
+            incrementCounter("app.voice.interview.turn.completed", "status", "success");
 
         } catch (Exception e) {
             log.error("Error triggering LLM response for session {}", sessionId, e);
+            recordTimerSinceNanos("app.voice.interview.turn.duration", turnStartNanos, "status", "failure");
+            incrementCounter("app.voice.interview.turn.completed", "status", "failure");
+            incrementCounter("app.voice.interview.errors", "stage", "turn");
             if (session.isOpen()) {
                 sendError(session, "AI响应失败: " + e.getMessage());
             }
@@ -756,6 +904,58 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         } catch (Exception e) {
             log.error("Error sending error message", e);
         }
+    }
+
+    /**
+     * Send audio chunk to frontend for streaming playback.
+     * Each chunk is a complete WAV for one sentence; frontend queues them via AudioContext.
+     */
+    private void sendAudioChunk(WebSocketSession session, byte[] wavAudio, int index, boolean isLast) {
+        if (!session.isOpen()) {
+            return;
+        }
+        try {
+            String base64Audio = Base64.getEncoder().encodeToString(wavAudio);
+            Map<String, Object> message = Map.of(
+                    "type", "audio_chunk",
+                    "data", base64Audio,
+                    "index", index,
+                    "isLast", isLast
+            );
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
+            log.debug("[Session] Sent audio chunk index={}, isLast={}, size={} bytes", index, isLast, wavAudio.length);
+        } catch (Exception e) {
+            log.error("Error sending audio chunk", e);
+        }
+    }
+
+    private void recordTimerSinceNanos(String metricName, long startNanos, String... tags) {
+        MeterRegistry registry = getRegistry();
+        if (registry == null) {
+            return;
+        }
+        long elapsed = Math.max(0, System.nanoTime() - startNanos);
+        registry.timer(metricName, tags).record(elapsed, TimeUnit.NANOSECONDS);
+    }
+
+    private void recordTimerMillis(String metricName, long millis, String... tags) {
+        MeterRegistry registry = getRegistry();
+        if (registry == null) {
+            return;
+        }
+        registry.timer(metricName, tags).record(Math.max(0, millis), TimeUnit.MILLISECONDS);
+    }
+
+    private void incrementCounter(String metricName, String... tags) {
+        MeterRegistry registry = getRegistry();
+        if (registry == null) {
+            return;
+        }
+        registry.counter(metricName, tags).increment();
+    }
+
+    private MeterRegistry getRegistry() {
+        return meterRegistryProvider.getIfAvailable();
     }
 
     /**
@@ -978,11 +1178,13 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         private final AtomicBoolean processing = new AtomicBoolean(false);
         /** 多段 STT completed 拼接，防抖后再送 LLM */
         private final AtomicReference<String> mergeBuffer = new AtomicReference<>("");
-        /** mergeBuffer 开始计时点，用于“最长等待补充”判定 */
+        /** mergeBuffer 开始计时点，用于”最长等待补充”判定 */
         private final AtomicLong mergeStartedAt = new AtomicLong(0);
         /** 最近一次 STT 活动时间（partial/final） */
         private final AtomicLong lastSttActivityAt = new AtomicLong(System.currentTimeMillis());
         private final AtomicReference<ScheduledFuture<?>> pendingUtteranceFlush = new AtomicReference<>();
+        /** 当前正在执行 LLM+TTS 管线的虚拟线程，断连时可中断 */
+        private volatile Thread processingThread = null;
 
         void appendFinalSttSegment(String segment) {
             String s = segment == null ? "" : segment.trim();
@@ -1036,16 +1238,24 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             }
         }
 
-        public String getAccumulatedText() {
+        String getAccumulatedText() {
             return accumulatedText.get();
         }
 
-        public void setAccumulatedText(String text) {
+        void setAccumulatedText(String text) {
             accumulatedText.set(text);
         }
 
-        public AtomicBoolean isProcessing() {
+        AtomicBoolean isProcessing() {
             return processing;
+        }
+
+        void setProcessingThread(Thread t) {
+            this.processingThread = t;
+        }
+
+        public Thread getProcessingThread() {
+            return processingThread;
         }
     }
 }

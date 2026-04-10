@@ -25,7 +25,7 @@ export default function RealtimeSubtitle({
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeAiText = displayedAiText || aiText;
-  const latestAiMessage = messages.findLast(msg => msg.role === 'ai');
+  const latestAiMessage = [...messages].reverse().find(msg => msg.role === 'ai');
   const shouldShowActiveAi =
     isAiSpeaking &&
     !!activeAiText &&

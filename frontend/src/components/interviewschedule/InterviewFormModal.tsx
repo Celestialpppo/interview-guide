@@ -17,6 +17,15 @@ interface InterviewFormModalProps {
 
 type Step = 'text' | 'parse-result' | 'form';
 
+const INTERVIEW_INVITE_EXAMPLE = `【阿里巴巴】后端开发工程师一面邀请
+候选人：张三
+面试时间：2026-04-15 19:30
+面试形式：视频面试（腾讯会议）
+会议链接：https://meeting.tencent.com/abc-defg-hij
+面试轮次：第一轮技术面
+面试官：李老师
+备注：请提前10分钟入会，准备项目介绍与系统设计案例。`;
+
 export const InterviewFormModal: React.FC<InterviewFormModalProps> = ({
   isOpen,
   onClose,
@@ -180,13 +189,22 @@ export const InterviewFormModal: React.FC<InterviewFormModalProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-          粘贴面试邀约文本
-        </label>
+        <div className="flex items-center justify-between mb-3">
+          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+            粘贴面试邀约文本
+          </label>
+          <button
+            type="button"
+            onClick={() => setRawText(INTERVIEW_INVITE_EXAMPLE)}
+            className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+          >
+            使用示例
+          </button>
+        </div>
         <textarea
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          placeholder="支持飞书、腾讯会议、Zoom 等格式..."
+          placeholder="支持飞书、腾讯会议、Zoom 等格式，或点击右上角“使用示例”快速体验解析。"
           className="w-full h-48 px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:focus:ring-primary-400 dark:focus:border-primary-400 resize-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
         />
       </div>

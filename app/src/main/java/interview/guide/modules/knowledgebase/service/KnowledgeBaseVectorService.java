@@ -34,8 +34,8 @@ public class KnowledgeBaseVectorService {
     public KnowledgeBaseVectorService(VectorStore vectorStore, VectorRepository vectorRepository) {
         this.vectorStore = vectorStore;
         this.vectorRepository = vectorRepository;
-        // 使用TokenTextSplitter默认配置，每个chunk约800 tokens，基于标点边界切分（无重叠）
-        this.textSplitter = new TokenTextSplitter();
+        // 使用 TokenTextSplitter 默认配置，每个 chunk 约 800 tokens，基于标点边界切分（无重叠）
+        this.textSplitter = TokenTextSplitter.builder().build();
     }
     /**
      * 将知识库内容向量化并存储

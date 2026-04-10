@@ -100,7 +100,7 @@ export default function InterviewHubPage() {
             skillName,
             difficulty: config.difficulty,
             questionCount: config.questionCount,
-            llmProvider: 'dashscope',
+            llmProvider: config.llmProvider,
             customJdText: config.isCustomSkill ? config.customJdText : undefined,
             customCategories: config.isCustomSkill ? config.customCategories : undefined,
           },
@@ -118,7 +118,7 @@ export default function InterviewHubPage() {
             hrEnabled: true,
             plannedDuration: config.plannedDuration,
             resumeId: config.resumeId,
-            llmProvider: 'dashscope',
+            llmProvider: config.llmProvider,
           },
         },
       });
@@ -533,6 +533,7 @@ export default function InterviewHubPage() {
           </div>
         )}
       </div>
+
     </div>
   );
 }
