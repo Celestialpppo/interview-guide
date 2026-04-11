@@ -87,9 +87,9 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     /** AI 音频播放结束后的冷却期，防止扬声器尾音被麦克风拾取触发 STT */
     private static final long AI_SPEAK_COOLDOWN_MS = 800;
     private static final String DEFAULT_OPENING_QUESTION_ALGORITHM =
-        "你好，我是本场面试官。先做一道算法热身题：请你说一道你最熟悉的算法题，按“题目、核心思路、时间复杂度、空间复杂度、边界条件”这五点说明。";
+        "你好，我是本场面试官。第一个问题：请你口述一道算法题，不写代码，只讲\u300C问题建模、数据结构选型、步骤、复杂度、边界处理\u300D。";
     private static final String DEFAULT_OPENING_QUESTION_BACKEND =
-        "你好，我是本场面试官。第一个问题：请用 1 分钟介绍一个你深度参与的后端项目，按三点回答：业务目标、你负责的核心模块、核心技术栈。说完我会立刻追问一个关键技术决策。";
+        "你好，我是本场面试官。第一个问题：请用 1 分钟介绍一个你深度参与的项目，按三点回答：业务目标、你负责的核心模块、核心技术栈。说完我会立刻追问一个关键技术决策。";
 
     private static ScheduledExecutorService createUtteranceMergeScheduler() {
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2, r -> {
