@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Clock, PhoneOff, AlertCircle, Bot, Mic, ArrowLeft } from 'lucide-react';
+import { Clock, PhoneOff, AlertCircle, Bot, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
 import InterviewPageHeader from '../components/InterviewPageHeader';
@@ -48,6 +48,7 @@ export default function VoiceInterviewPage() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Skills for template name lookup
   const [skills, setSkills] = useState<SkillDTO[]>([]);
@@ -58,7 +59,7 @@ export default function VoiceInterviewPage() {
   const audioPlayerRef = useRef<HTMLAudioElement>(null);
   const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoStartRef = useRef(false);
-  const blockMicToServerRef = useRef(false);
+  const isAiSpeakingRef = useRef(false);
   const lastAiCommittedTextRef = useRef('');
   const pendingAiTextCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chunked audio playback refs
@@ -70,6 +71,11 @@ export default function VoiceInterviewPage() {
   // Ref to track latest aiText for async callbacks (avoids stale closure)
   const aiTextRef = useRef('');
   useEffect(() => { aiTextRef.current = aiText; }, [aiText]);
+
+  const setAiSpeaking = useCallback((value: boolean) => {
+    isAiSpeakingRef.current = value;
+    setIsAiSpeaking(value);
+  }, []);
 
   const clearPendingAiTextCommit = useCallback(() => {
     if (pendingAiTextCommitRef.current) {
@@ -94,7 +100,6 @@ export default function VoiceInterviewPage() {
       ];
     });
     lastAiCommittedTextRef.current = normalized;
-    // 提交后清除活跃字幕，避免同一段文字同时出现在历史 + 活跃区域
     setAiText(prev => prev?.trim() === normalized ? '' : prev);
   }, []);
 
@@ -151,8 +156,7 @@ export default function VoiceInterviewPage() {
         playNextChunk();
       }
 
-      setIsAiSpeaking(true);
-      blockMicToServerRef.current = true;
+      setAiSpeaking(true);
 
       if (isLast) {
         const startedAt = Date.now();
@@ -164,23 +168,23 @@ export default function VoiceInterviewPage() {
           if (chunkQueueRef.current.length === 0 && !isChunkPlayingRef.current) {
             clearInterval(drainCheckRef.current!);
             drainCheckRef.current = null;
-            setIsAiSpeaking(false);
-            blockMicToServerRef.current = false;
+            setAiSpeaking(false);
+            setIsSubmitting(false);
             clearPendingAiTextCommit();
             commitAiMessage(aiTextRef.current.trim());
             setAiText('');
           } else if (Date.now() - startedAt > MAX_DRAIN_WAIT_MS) {
             clearInterval(drainCheckRef.current!);
             drainCheckRef.current = null;
-            setIsAiSpeaking(false);
-            blockMicToServerRef.current = false;
+            setAiSpeaking(false);
+            setIsSubmitting(false);
           }
         }, 100);
       }
     } catch (e) {
       console.error('[ChunkAudio] Decode/play error:', e);
     }
-  }, [getAudioContext, playNextChunk, clearPendingAiTextCommit, commitAiMessage]);
+  }, [getAudioContext, playNextChunk, clearPendingAiTextCommit, commitAiMessage, setAiSpeaking]);
 
   // Load skills for template name display
   useEffect(() => {
@@ -235,12 +239,12 @@ export default function VoiceInterviewPage() {
       if (playPromise !== undefined) {
         playPromise.catch(() => {
           setError('请点击页面任意位置以启用音频播放');
-          blockMicToServerRef.current = false;
-          setIsAiSpeaking(false);
+          setAiSpeaking(false);
+          setIsSubmitting(false);
         });
       }
     }
-  }, [aiAudio]);
+  }, [aiAudio, setAiSpeaking]);
 
   const startTimer = () => {
     timerRef.current = setInterval(() => {
@@ -263,6 +267,25 @@ export default function VoiceInterviewPage() {
     };
     return phaseMap[phase] || phase;
   };
+
+  // 手动提交回答
+  const handleSubmitAnswer = useCallback(() => {
+    if (!wsRef.current || !wsRef.current.isConnected()) {
+      return;
+    }
+    if (!userText.trim() || isAiSpeakingRef.current || isSubmitting) {
+      return;
+    }
+    setIsSubmitting(true);
+    // 先将用户文字提交到消息列表
+    setMessages(prev => [
+      ...prev,
+      { role: 'user', text: userText.trim(), id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
+    ]);
+    setUserText('');
+    // 发送 submit 控制消息到后端
+    wsRef.current.sendControl('submit');
+  }, [userText, isSubmitting]);
 
   const handlePhaseConfig = useCallback(async (config: {
     skillId: string;
@@ -306,13 +329,22 @@ export default function VoiceInterviewPage() {
               },
               onMessage: (_message) => {},
               onSubtitle: (text, isFinal) => {
-                setUserText(text);
+                // 手动提交模式下，isFinal=true 由 triggerLlmResponse 触发（提交用户消息到历史）
                 if (isFinal && text.trim()) {
-                  setMessages(prev => [
-                    ...prev,
-                    { role: 'user', text: text.trim(), id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
-                  ]);
+                  // 提交确认：服务端已开始处理，将文字写入历史（如果 handleSubmitAnswer 没有先写入的话）
+                  setMessages(prev => {
+                    const last = prev[prev.length - 1];
+                    if (last?.role === 'user' && last.text.trim() === text.trim()) {
+                      return prev; // handleSubmitAnswer 已经写入过了
+                    }
+                    return [
+                      ...prev,
+                      { role: 'user', text: text.trim(), id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
+                    ];
+                  });
                   setUserText('');
+                } else {
+                  setUserText(text);
                 }
               },
               onAudioResponse: (audioData, text) => {
@@ -322,24 +354,22 @@ export default function VoiceInterviewPage() {
                   clearPendingAiTextCommit();
                   setAiAudio(audioData);
                   setAiText(text);
-                  // 仅在实际开始播放时再阻断上行音频，避免自动播放失败导致无法说话
-                  setIsAiSpeaking(false);
-                  blockMicToServerRef.current = false;
+                  setAiSpeaking(true);
                   return;
                 }
 
-                // text-only 消息先短暂缓冲，等待可能紧随其后的 audio，避免”同一句显示两次”
                 setAiAudio('');
                 setAiText(text);
-                setIsAiSpeaking(false);
-                blockMicToServerRef.current = false;
+                setAiSpeaking(false);
 
                 if (!normalized) {
+                  setIsSubmitting(false);
                   return;
                 }
                 clearPendingAiTextCommit();
                 pendingAiTextCommitRef.current = setTimeout(() => {
                   commitAiMessage(normalized);
+                  setIsSubmitting(false);
                   pendingAiTextCommitRef.current = null;
                 }, 2500);
               },
@@ -371,7 +401,7 @@ export default function VoiceInterviewPage() {
       setConnectionStatus('disconnected');
       alert('创建会话失败：' + errorMessage);
     }
-  }, []);
+  }, [clearPendingAiTextCommit, commitAiMessage, handleAudioChunk, setAiSpeaking]);
 
   useEffect(() => {
     if (!presetVoiceConfig || autoStartRef.current) {
@@ -390,10 +420,8 @@ export default function VoiceInterviewPage() {
     });
   }, [handlePhaseConfig, presetVoiceConfig]);
 
+  // 麦克风音频持续发送给服务端做 ASR（手动提交模式下不需要 blockade，回声不会触发 LLM）
   const handleAudioData = (audioData: string) => {
-    if (blockMicToServerRef.current) {
-      return;
-    }
     if (wsRef.current && wsRef.current.isConnected()) {
       wsRef.current.sendAudio(audioData);
     } else {
@@ -401,15 +429,7 @@ export default function VoiceInterviewPage() {
     }
   };
 
-  const handleSpeechStart = () => {
-    blockMicToServerRef.current = false;
-    if (audioPlayerRef.current && isAiSpeaking) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-      setIsAiSpeaking(false);
-    }
-  };
-
+  const handleSpeechStart = () => {};
   const handleSpeechEnd = () => {};
 
   const handlePause = async (type: 'short' | 'long') => {
@@ -466,13 +486,16 @@ export default function VoiceInterviewPage() {
     navigate('/history');
   };
 
+  // 提交按钮是否可用
+  const canSubmit = isRecording && !!userText.trim() && !isAiSpeaking && !isSubmitting && connectionStatus === 'connected';
+
   if (!autoStartRef.current && !presetVoiceConfig) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-8 text-center max-w-md w-full">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <p className="text-slate-700 dark:text-slate-200 text-lg font-semibold mb-2">未检测到语音面试配置</p>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请从“语音面试”入口重新开始</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">请从"语音面试"入口重新开始</p>
           <button
             onClick={handleCloseModal}
             className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
@@ -573,7 +596,7 @@ export default function VoiceInterviewPage() {
                         animate={{ opacity: 1 }}
                         className="text-slate-500 dark:text-slate-400"
                       >
-                        {isRecording ? '正在聆听，请继续作答...' : '点击麦克风开始发言'}
+                        {isRecording ? '正在聆听，说完后点击"提交回答"...' : '点击麦克风开始发言'}
                       </motion.p>
                     )}
                   </AnimatePresence>
@@ -604,6 +627,22 @@ export default function VoiceInterviewPage() {
                 />
 
                 <button
+                  onClick={handleSubmitAnswer}
+                  disabled={!canSubmit}
+                  className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+                    canSubmit
+                      ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-md shadow-primary-500/30'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                  }`}
+                  title="提交回答"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <SendHorizonal className="w-4 h-4" />
+                    提交回答
+                  </span>
+                </button>
+
+                <button
                   onClick={handleEndInterview}
                   disabled={connectionStatus !== 'connected'}
                   className="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50"
@@ -616,7 +655,7 @@ export default function VoiceInterviewPage() {
                 </button>
               </div>
               <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-3">
-                {isRecording ? '正在聆听中' : '点击麦克风发言'}
+                {isAiSpeaking ? '面试官正在回答...' : isSubmitting ? '正在思考...' : isRecording ? '说完后点击"提交回答"' : '点击麦克风发言'}
               </p>
             </div>
           </div>
@@ -637,14 +676,14 @@ export default function VoiceInterviewPage() {
           ref={audioPlayerRef}
           src={`data:audio/wav;base64,${aiAudio}`}
           onEnded={() => {
-            setIsAiSpeaking(false);
-            blockMicToServerRef.current = false;
+            setAiSpeaking(false);
+            setIsSubmitting(false);
             clearPendingAiTextCommit();
             commitAiMessage(aiText.trim());
             setAiText('');
             setAiAudio('');
           }}
-          onPlay={() => setIsAiSpeaking(true)}
+          onPlay={() => setAiSpeaking(true)}
           autoPlay
           style={{ display: 'none' }}
         />

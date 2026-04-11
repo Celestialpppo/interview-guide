@@ -10,10 +10,11 @@ import interview.guide.modules.voiceinterview.dto.SessionResponseDTO;
 import interview.guide.modules.voiceinterview.dto.VoiceEvaluationDetailDTO;
 import interview.guide.modules.voiceinterview.dto.VoiceEvaluationStatusDTO;
 import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
-import interview.guide.modules.voiceinterview.model.VoiceInterviewMessageEntity;
+import interview.guide.modules.voiceinterview.dto.VoiceInterviewMessageDTO;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewEvaluationService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -45,7 +46,7 @@ public class VoiceInterviewController {
      * Create a new voice interview session
      */
     @PostMapping("/sessions")
-    public Result<SessionResponseDTO> createSession(@RequestBody CreateSessionRequest request) {
+    public Result<SessionResponseDTO> createSession(@Valid @RequestBody CreateSessionRequest request) {
         log.info("Creating voice interview session for role: {}", request.getRoleType());
         SessionResponseDTO session = voiceInterviewService.createSession(request);
         return Result.success(session);
@@ -110,23 +111,18 @@ public class VoiceInterviewController {
         @RequestParam(required = false) String status
     ) {
         log.info("Getting sessions for user: {}, status: {}", userId, status);
-        try {
-            List<SessionMetaDTO> sessions = voiceInterviewService.getAllSessions(userId, status);
-            return Result.success(sessions);
-        } catch (Exception e) {
-            log.error("Failed to get sessions", e);
-            return Result.error(500, "获取会话列表失败: " + e.getMessage());
-        }
+        List<SessionMetaDTO> sessions = voiceInterviewService.getAllSessions(userId, status);
+        return Result.success(sessions);
     }
 
     /**
      * Get conversation history for a session
      */
     @GetMapping("/sessions/{sessionId}/messages")
-    public Result<List<VoiceInterviewMessageEntity>> getMessages(@PathVariable Long sessionId) {
+    public Result<List<VoiceInterviewMessageDTO>> getMessages(@PathVariable Long sessionId) {
         log.info("Getting messages for session: {}", sessionId);
-        List<VoiceInterviewMessageEntity> messages =
-                voiceInterviewService.getConversationHistory(sessionId.toString());
+        List<VoiceInterviewMessageDTO> messages =
+                voiceInterviewService.getConversationHistoryDTO(sessionId.toString());
         return Result.success(messages);
     }
 

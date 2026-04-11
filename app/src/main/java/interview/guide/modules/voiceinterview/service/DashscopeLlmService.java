@@ -5,6 +5,7 @@ import interview.guide.modules.resume.model.ResumeEntity;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import java.util.function.Consumer;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class DashscopeLlmService {
 
     private static final String TERMINAL_PUNCTUATION = "。！？；!?;.";
@@ -25,16 +27,6 @@ public class DashscopeLlmService {
     private final VoiceInterviewPromptService promptService;
     private final ResumeRepository resumeRepository;
     private final VoiceInterviewProperties voiceInterviewProperties;
-
-    public DashscopeLlmService(LlmProviderRegistry llmProviderRegistry,
-                               VoiceInterviewPromptService promptService,
-                               ResumeRepository resumeRepository,
-                               VoiceInterviewProperties voiceInterviewProperties) {
-        this.llmProviderRegistry = llmProviderRegistry;
-        this.promptService = promptService;
-        this.resumeRepository = resumeRepository;
-        this.voiceInterviewProperties = voiceInterviewProperties;
-    }
 
     public String chat(String userInput, VoiceInterviewSessionEntity session, List<String> conversationHistory) {
         try {

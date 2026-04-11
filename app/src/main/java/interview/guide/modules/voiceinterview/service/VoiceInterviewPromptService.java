@@ -1,11 +1,13 @@
 package interview.guide.modules.voiceinterview.service;
 
 import interview.guide.modules.interview.skill.InterviewSkillService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class VoiceInterviewPromptService {
 
     private static final String DEFAULT_PROMPT = "你是一位专业的面试官，请根据候选人的回答进行深入提问。";
@@ -19,10 +21,6 @@ public class VoiceInterviewPromptService {
             """;
 
     private final InterviewSkillService skillService;
-
-    public VoiceInterviewPromptService(InterviewSkillService skillService) {
-        this.skillService = skillService;
-    }
 
     public String generateSystemPromptWithContext(String skillId, String resumeText) {
         String basePrompt = loadPersona(skillId);

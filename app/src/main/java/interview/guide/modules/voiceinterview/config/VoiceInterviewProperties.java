@@ -26,22 +26,6 @@ public class VoiceInterviewProperties {
     private OpeningConfig opening = new OpeningConfig();
 
     /**
-     * 最后一次 STT 定稿后，再等待这么久才调用 LLM，用于把多次 VAD 切段合并成一轮回答。
-     */
-    private int userUtteranceDebounceMs = 900;
-    /**
-     * 判定“用户已说完”前要求的最小静音时长（毫秒）。
-     */
-    private int minSilenceBeforeCommitMs = 1400;
-    /**
-     * 当一句话很短且没有结束标点时，延迟提交，等待后续补充。
-     */
-    private int minCommitChars = 12;
-    /**
-     * 允许等待用户继续补充的最长时间（毫秒），超过后强制提交。
-     */
-    private int maxWaitForContinuationMs = 4500;
-    /**
      * 语音面试单轮面试官回复最大字符数（超出会截断到句子边界）。
      */
     private int aiQuestionMaxChars = 120;

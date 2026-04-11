@@ -6,6 +6,7 @@ import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.dto.CreateSessionRequest;
+import interview.guide.modules.voiceinterview.dto.VoiceInterviewMessageDTO;
 import interview.guide.modules.voiceinterview.dto.SessionMetaDTO;
 import interview.guide.modules.voiceinterview.dto.SessionResponseDTO;
 import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
@@ -246,6 +247,24 @@ public class VoiceInterviewService {
     public List<VoiceInterviewMessageEntity> getConversationHistory(String sessionId) {
         Long sessionIdLong = parseSessionId(sessionId);
         return messageRepository.findBySessionIdOrderBySequenceNumAsc(sessionIdLong);
+    }
+
+    /**
+     * Get conversation history as DTOs (for frontend)
+     */
+    public List<VoiceInterviewMessageDTO> getConversationHistoryDTO(String sessionId) {
+        return getConversationHistory(sessionId).stream()
+            .map(msg -> VoiceInterviewMessageDTO.builder()
+                .id(msg.getId())
+                .sessionId(msg.getSessionId())
+                .messageType(msg.getMessageType())
+                .phase(msg.getPhase() != null ? msg.getPhase().name() : null)
+                .userRecognizedText(msg.getUserRecognizedText())
+                .aiGeneratedText(msg.getAiGeneratedText())
+                .timestamp(msg.getTimestamp())
+                .sequenceNum(msg.getSequenceNum())
+                .build())
+            .collect(Collectors.toList());
     }
 
     /**

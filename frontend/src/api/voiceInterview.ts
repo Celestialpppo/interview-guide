@@ -83,19 +83,6 @@ export interface SessionMeta {
   evaluateError?: string;
 }
 
-/**
- * Session response with WebSocket URL
- */
-export interface SessionResponseDTO {
-  sessionId: number;
-  roleType: string;
-  currentPhase: string;
-  status: string;
-  startTime: string;
-  plannedDuration: number;
-  webSocketUrl: string;
-}
-
 // WebSocket 消息类型
 export interface WebSocketAudioMessage {
   type: 'audio';
@@ -209,8 +196,8 @@ export const voiceInterviewApi = {
   /**
    * Resume interview session
    */
-  async resumeSession(sessionId: number): Promise<SessionResponseDTO> {
-    return request.put<SessionResponseDTO>(
+  async resumeSession(sessionId: number): Promise<SessionResponse> {
+    return request.put<SessionResponse>(
       `/api/voice-interview/sessions/${sessionId}/resume`
     );
   },
@@ -260,19 +247,9 @@ export class VoiceInterviewWebSocket {
    */
   connect(): void {
     try {
-      console.log('[WebSocket] Attempting to connect to:', this.url);
-      console.log('[WebSocket] User agent:', navigator.userAgent);
-
-      // 检测是否使用代理
-      const proxyCheck = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-      console.log('[WebSocket] Navigation type:', proxyCheck?.type);
-
       this.ws = new WebSocket(this.url);
 
-      // 监控连接状态变化
       this.ws.onopen = () => {
-        console.log('[WebSocket] Connected successfully for session:', this.sessionId);
-        console.log('[WebSocket] Ready state:', this.ws?.readyState);
         this.reconnectAttempts = 0;
         this.handlers.onOpen?.();
       };
@@ -318,37 +295,15 @@ export class VoiceInterviewWebSocket {
       };
 
       this.ws.onclose = (event) => {
-        console.log('[WebSocket] Closed for session:', this.sessionId);
-        console.log('[WebSocket] Close code:', event.code, '- reason:', event.reason);
-        console.log('[WebSocket] Was clean:', event.wasClean);
-
-        // 提供常见错误代码的解决方案
-        if (event.code === 1006) {
-          console.error('[WebSocket] 连接异常关闭 (code 1006)');
-          console.warn('[WebSocket] 可能原因：\n1. 代理/VPN 干扰了 WebSocket 连接\n2. 网络中断\n3. 服务器未响应\n建议：关闭代理/VPN 后重试');
-        }
-
         this.handlers.onClose?.(event);
 
-        // 如果不是主动关闭，尝试重连
         if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
-          console.log(
-            `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`
-          );
           setTimeout(() => this.connect(), this.reconnectDelay);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('[WebSocket] Error for session:', this.sessionId);
-        console.error('[WebSocket] Error type:', error.type);
-        console.error('[WebSocket] Current ready state:', this.ws?.readyState);
-        console.error('[WebSocket] URL was:', this.url);
-
-        // 提供代理诊断提示
-        console.warn('[WebSocket] 如果使用了代理/VPN，请尝试：\n1. 关闭代理后重试\n2. 或在代理设置中添加 localhost 到绕过列表');
-
         this.handlers.onError?.(error);
       };
     } catch (error) {

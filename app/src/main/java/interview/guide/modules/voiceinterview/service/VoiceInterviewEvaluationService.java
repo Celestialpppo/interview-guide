@@ -15,6 +15,7 @@ import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewEvaluationRepository;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewMessageRepository;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewSessionRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class VoiceInterviewEvaluationService {
 
     private final UnifiedEvaluationService unifiedEvaluationService;
@@ -42,23 +44,6 @@ public class VoiceInterviewEvaluationService {
     private final VoiceInterviewSessionRepository sessionRepository;
     private final ObjectMapper objectMapper;
     private final InterviewSkillService skillService;
-
-    public VoiceInterviewEvaluationService(
-            UnifiedEvaluationService unifiedEvaluationService,
-            LlmProviderRegistry llmProviderRegistry,
-            VoiceInterviewEvaluationRepository evaluationRepository,
-            VoiceInterviewMessageRepository messageRepository,
-            VoiceInterviewSessionRepository sessionRepository,
-            ObjectMapper objectMapper,
-            InterviewSkillService skillService) {
-        this.unifiedEvaluationService = unifiedEvaluationService;
-        this.llmProviderRegistry = llmProviderRegistry;
-        this.evaluationRepository = evaluationRepository;
-        this.messageRepository = messageRepository;
-        this.sessionRepository = sessionRepository;
-        this.objectMapper = objectMapper;
-        this.skillService = skillService;
-    }
 
     /**
      * 生成语音面试评估（由异步消费者调用）
@@ -78,10 +63,8 @@ public class VoiceInterviewEvaluationService {
                 return;
             }
 
-            // 从消息中构建问答记录
             List<QaRecord> qaRecords = buildQaRecords(messages);
 
-            // 通过 LlmProviderRegistry 获取 ChatClient（事务外调用 LLM）
             String provider = session.getLlmProvider();
             ChatClient chatClient = llmProviderRegistry.getChatClientOrDefault(provider);
 
@@ -90,7 +73,6 @@ public class VoiceInterviewEvaluationService {
             EvaluationReport report = unifiedEvaluationService.evaluate(
                 chatClient, sessionIdStr, qaRecords, null, referenceContext);
 
-            // 保存评估结果（事务内）
             saveEvaluationTransactional(sessionId, session, report);
 
         } catch (BusinessException e) {
@@ -102,12 +84,7 @@ public class VoiceInterviewEvaluationService {
         }
     }
 
-    /**
-     * 获取评估结果
-     */
     public VoiceEvaluationDetailDTO getEvaluation(Long sessionId) {
-        log.info("获取语音面试评估: sessionId={}", sessionId);
-
         VoiceInterviewEvaluationEntity evaluation = evaluationRepository.findBySessionId(sessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_EVALUATION_NOT_FOUND,
                 "评估结果不存在: " + sessionId));
@@ -115,9 +92,6 @@ public class VoiceInterviewEvaluationService {
         return buildDetailDTO(evaluation);
     }
 
-    /**
-     * 从消息中构建问答记录
-     */
     private List<QaRecord> buildQaRecords(List<VoiceInterviewMessageEntity> messages) {
         List<QaRecord> records = new ArrayList<>();
         int index = 0;
@@ -140,9 +114,6 @@ public class VoiceInterviewEvaluationService {
         return records;
     }
 
-    /**
-     * 从 AI 提问内容推断分类
-     */
     private String inferCategory(String aiText) {
         if (aiText == null) return "综合";
         if (aiText.contains("项目") || aiText.contains("实习") || aiText.contains("工作经历")) return "项目深挖";
@@ -151,9 +122,6 @@ public class VoiceInterviewEvaluationService {
         return "技术问题";
     }
 
-    /**
-     * 保存评估报告到数据库（事务内）
-     */
     @Transactional
     public void saveEvaluationTransactional(Long sessionId, VoiceInterviewSessionEntity session,
                                  EvaluationReport report) {
@@ -206,9 +174,6 @@ public class VoiceInterviewEvaluationService {
         }
     }
 
-    /**
-     * 从实体构建 DTO（供前端展示）
-     */
     private VoiceEvaluationDetailDTO buildDetailDTO(VoiceInterviewEvaluationEntity entity) {
         try {
             List<EvaluationReport.QuestionEvaluation> questionItems = objectMapper.readValue(
@@ -272,5 +237,4 @@ public class VoiceInterviewEvaluationService {
             .orElseThrow(() -> new BusinessException(ErrorCode.VOICE_SESSION_NOT_FOUND,
                 "语音面试会话不存在: " + sessionId));
     }
-
 }
