@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -30,6 +31,8 @@ import java.util.regex.Pattern;
 @Slf4j
 @Service
 public class InterviewSkillService {
+
+    public static final String CUSTOM_SKILL_ID = "custom";
 
     private static final int MIN_JD_LENGTH = 50;
 
@@ -53,6 +56,11 @@ public class InterviewSkillService {
 
     /** 参考内容缓存（classpath 资源不可变，加载一次后复用） */
     private final Map<String, String> referenceCache = new ConcurrentHashMap<>();
+
+    /** 全局 category key → (ref文件名, 是否shared) 映射，启动时构建，之后只读 */
+    private final Map<String, RefMapping> categoryRefIndex = new HashMap<>();
+
+    record RefMapping(String ref, boolean shared) {}
 
     public InterviewSkillService(LlmProviderRegistry llmProviderRegistry,
                                  StructuredOutputInvoker structuredOutputInvoker,
@@ -87,6 +95,23 @@ public class InterviewSkillService {
         }
 
         log.info("共加载 {} 个预设 Skill", presetRegistry.size());
+
+        buildCategoryRefIndex();
+    }
+
+    private void buildCategoryRefIndex() {
+        categoryRefIndex.clear();
+        for (var entry : presetRegistry.entrySet()) {
+            InterviewSkillProperties.SkillDefinition def = entry.getValue();
+            if (def.getCategories() == null) continue;
+            for (InterviewSkillProperties.CategoryDef cat : def.getCategories()) {
+                if (cat.getRef() != null && !cat.getRef().isBlank() && cat.getKey() != null) {
+                    categoryRefIndex.putIfAbsent(cat.getKey(),
+                        new RefMapping(cat.getRef(), Boolean.TRUE.equals(cat.getShared())));
+                }
+            }
+        }
+        log.info("构建 category→reference 映射: {} 个条目", categoryRefIndex.size());
     }
 
     public List<SkillDTO> getAllSkills() {
@@ -101,6 +126,33 @@ public class InterviewSkillService {
             return toSkillDTO(skillId, preset);
         }
         throw new BusinessException(ErrorCode.BAD_REQUEST, "未找到面试主题: " + skillId);
+    }
+
+    /**
+     * 从 JD 解析结果构建自定义 SkillDTO。
+     * 遍历 customCategories，尝试在 categoryRefIndex 中匹配参考文件。
+     */
+    public SkillDTO buildCustomSkill(List<CategoryDTO> customCategories) {
+        int matchedCount = 0;
+        List<SkillCategoryDTO> categories = new ArrayList<>();
+
+        for (CategoryDTO cat : customCategories) {
+            RefMapping refMapping = categoryRefIndex.get(cat.key());
+            if (refMapping != null) {
+                matchedCount++;
+                log.info("JD 分类 {} 匹配到参考文件: {} (shared={})", cat.key(), refMapping.ref(), refMapping.shared());
+                categories.add(new SkillCategoryDTO(cat.key(), cat.label(), cat.priority(),
+                    refMapping.ref(), refMapping.shared()));
+            } else {
+                categories.add(new SkillCategoryDTO(cat.key(), cat.label(), cat.priority(), null, false));
+            }
+        }
+
+        log.info("构建自定义 Skill: {} 个分类, {} 个匹配到参考文件", categories.size(), matchedCount);
+
+        return new SkillDTO(CUSTOM_SKILL_ID, "自定义面试（JD 解析）",
+            "基于职位描述提取的面试方向", categories,
+            false, null, null, null);
     }
 
     public List<CategoryDTO> parseJd(String jdText) {

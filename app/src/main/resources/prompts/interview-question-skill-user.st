@@ -30,8 +30,6 @@
 {personaSection}
 
 ## 输出要求
-请严格按照 JSON 格式输出问题列表，直接输出 JSON 对象，不要包含任何 Markdown 代码块标签。
-
 每个主问题必须包含 topicSummary 字段：10 字以内的知识点摘要（用于历史去重），格式示例：
 - "Redis RDB/AOF 持久化对比"
 - "MySQL 索引失效场景"

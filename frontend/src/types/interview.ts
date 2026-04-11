@@ -27,6 +27,7 @@ export interface CreateInterviewRequest {
   llmProvider?: string;
   skillId: string;
   difficulty?: string;
+  customCategories?: { key: string; label: string; priority: string }[];
 }
 
 export interface SubmitAnswerRequest {

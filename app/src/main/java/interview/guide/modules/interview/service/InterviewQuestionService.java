@@ -6,6 +6,7 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.skill.InterviewSkillService;
+import interview.guide.modules.interview.skill.InterviewSkillService.CategoryDTO;
 import interview.guide.modules.interview.skill.InterviewSkillService.SkillDTO;
 import interview.guide.modules.interview.skill.InterviewSkillService.SkillCategoryDTO;
 import org.slf4j.Logger;
@@ -90,9 +91,16 @@ public class InterviewQuestionService {
             String difficulty,
             String resumeText,
             int questionCount,
-            List<HistoricalQuestion> historicalQuestions) {
+            List<HistoricalQuestion> historicalQuestions,
+            List<CategoryDTO> customCategories) {
 
-        SkillDTO skill = skillService.getSkill(skillId);
+        SkillDTO skill;
+        if (InterviewSkillService.CUSTOM_SKILL_ID.equals(skillId)
+                && customCategories != null && !customCategories.isEmpty()) {
+            skill = skillService.buildCustomSkill(customCategories);
+        } else {
+            skill = skillService.getSkill(skillId);
+        }
         Map<String, Integer> allocation = skillService.calculateAllocation(skill.categories(), questionCount);
         String allocationTable = skillService.buildAllocationDescription(allocation, skill.categories());
 
@@ -141,7 +149,7 @@ public class InterviewQuestionService {
     }
 
     public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount, List<HistoricalQuestion> historicalQuestions) {
-        return generateQuestionsBySkill(chatClient, InterviewDefaults.SKILL_ID, InterviewDefaults.DIFFICULTY, resumeText, questionCount, historicalQuestions);
+        return generateQuestionsBySkill(chatClient, InterviewDefaults.SKILL_ID, InterviewDefaults.DIFFICULTY, resumeText, questionCount, historicalQuestions, null);
     }
 
     public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount) {

@@ -23,6 +23,7 @@ interface InterviewProps {
     llmProvider?: string;
     skillId?: string;
     difficulty?: Difficulty;
+    customCategories?: { key: string; label: string; priority: string }[];
   };
   onBack: () => void;
   onInterviewComplete: () => void;
@@ -50,6 +51,7 @@ export default function Interview({
   const llmProvider = initialConfig?.llmProvider ?? 'dashscope';
   const skillId = initialConfig?.skillId ?? 'java-backend';
   const difficulty = initialConfig?.difficulty ?? 'mid';
+  const customCategories = initialConfig?.customCategories;
 
   // 自动开始面试（恢复已有会话 或 创建新会话）
   useEffect(() => {
@@ -77,6 +79,7 @@ export default function Interview({
         llmProvider,
         skillId,
         difficulty,
+        customCategories: skillId === 'custom' ? customCategories : undefined,
       });
 
       initSession(newSession);

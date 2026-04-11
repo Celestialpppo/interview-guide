@@ -88,6 +88,7 @@ interface InterviewEntryState {
     difficulty?: Difficulty;
     questionCount?: number;
     llmProvider?: string;
+    customCategories?: { key: string; label: string; priority: string }[];
   };
 }
 
