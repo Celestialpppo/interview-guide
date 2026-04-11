@@ -55,6 +55,10 @@ function isCompletedStatus(status: string): boolean {
   return status === 'COMPLETED' || status === 'EVALUATED';
 }
 
+function isLiveStatus(status: string): boolean {
+  return status === 'IN_PROGRESS' || status === 'PAUSED';
+}
+
 function isEvaluateCompleted(item: UnifiedInterviewItem): boolean {
   if (item.evaluateStatus === 'COMPLETED') return true;
   if (item.status === 'EVALUATED') return true;
@@ -298,7 +302,12 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     if (item.type === 'text') {
       onViewInterview(item.sessionId, item.resumeId);
     } else if (item.voiceSessionId) {
-      navigate(`/voice-interview/${item.voiceSessionId}/evaluation`);
+      const isLive = isLiveStatus(item.status);
+      if (isLive) {
+        navigate('/voice-interview', { state: { voiceSessionId: item.voiceSessionId } });
+      } else {
+        navigate(`/voice-interview/${item.voiceSessionId}/evaluation`);
+      }
     }
   };
 
@@ -532,6 +541,15 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                         {item.type === 'text' && !isCompletedStatus(item.status) && !isEvaluateCompleted(item) && onContinueInterview && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onContinueInterview(item.sessionId); }}
+                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="继续面试"
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {item.type === 'voice' && isLiveStatus(item.status) && item.voiceSessionId && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate('/voice-interview', { state: { voiceSessionId: item.voiceSessionId } }); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="继续面试"
                           >

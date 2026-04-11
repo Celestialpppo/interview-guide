@@ -11,6 +11,7 @@ import {
   TbTopologyStarRing3,
   TbSparkles,
   TbTestPipe,
+  TbRobot,
 } from 'react-icons/tb';
 
 /**
@@ -27,6 +28,7 @@ const SKILL_ICON_MAP: Record<string, IconType> = {
   'algorithm': TbMathFunction,
   'system-design': TbTopologyStarRing3,
   'test-development': TbTestPipe,
+  'ai-agent-dev': TbRobot,
   'custom': TbSparkles,
 };
 

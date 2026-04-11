@@ -215,29 +215,19 @@ export const voiceInterviewApi = {
     );
   },
 
-  /**
-   * Get conversation history for a session
-   */
-  async getConversationHistory(sessionId: number): Promise<InterviewMessage[]> {
-    return request.get<InterviewMessage[]>(
-      `/api/voice-interview/sessions/${sessionId}/messages`
-    );
-  },
 };
 
 // ========== WebSocket 连接管理类 ==========
 
 export class VoiceInterviewWebSocket {
   private ws: WebSocket | null = null;
-  private sessionId: number;
   private url: string;
   private handlers: WebSocketEventHandlers;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
   private reconnectDelay = 2000;
 
-  constructor(sessionId: number, url: string, handlers: WebSocketEventHandlers) {
-    this.sessionId = sessionId;
+  constructor(_sessionId: number, url: string, handlers: WebSocketEventHandlers) {
     this.url = url;
     this.handlers = handlers;
   }
