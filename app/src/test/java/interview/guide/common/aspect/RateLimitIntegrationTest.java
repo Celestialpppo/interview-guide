@@ -68,11 +68,11 @@ class RateLimitIntegrationTest {
         redissonClient.getBucket(valueKey, StringCodec.INSTANCE).set(String.valueOf(maxCount));
 
         // 前两次请求应成功
-        assertEquals(1L, executeLuaScript(keyPrefix, maxCount));
-        assertEquals(1L, executeLuaScript(keyPrefix, maxCount));
+        assertEquals(1L, executeLuaScript(new RuleArg(keyPrefix, 1000, maxCount)));
+        assertEquals(1L, executeLuaScript(new RuleArg(keyPrefix, 1000, maxCount)));
 
         // 第三次请求应被拒绝
-        assertEquals(0L, executeLuaScript(keyPrefix, maxCount));
+        assertEquals(0L, executeLuaScript(new RuleArg(keyPrefix, 1000, maxCount)));
     }
 
     @Test
@@ -88,33 +88,55 @@ class RateLimitIntegrationTest {
         redissonClient.getBucket(key2 + ":value", StringCodec.INSTANCE).set("1");
 
         // 第一次成功，第二次被维度2限制
-        assertEquals(1L, executeLuaScript(List.of(key1, key2), maxCount));
-        assertEquals(0L, executeLuaScript(List.of(key1, key2), maxCount));
+        assertEquals(1L, executeLuaScript(
+                new RuleArg(key1, 1000, maxCount),
+                new RuleArg(key2, 1000, maxCount)));
+        assertEquals(0L, executeLuaScript(
+                new RuleArg(key1, 1000, maxCount),
+                new RuleArg(key2, 1000, maxCount)));
     }
 
-    private Object executeLuaScript(String key, long maxCount) {
-        return executeLuaScript(List.of(key), maxCount);
+    @Test
+    @DisplayName("验证多条规则支持不同时间窗口和阈值")
+    void testIndependentRuleArguments() {
+        String globalKey = "ratelimit:test:global";
+        String ipKey = "ratelimit:test:ip";
+        String userKey = "ratelimit:test:user";
+
+        RuleArg global = new RuleArg(globalKey, 60_000, 100);
+        RuleArg ip = new RuleArg(ipKey, 1_000, 10);
+        RuleArg user = new RuleArg(userKey, 1_000, 5);
+
+        for (int i = 0; i < 5; i++) {
+            assertEquals(1L, executeLuaScript(global, ip, user));
+        }
+
+        assertEquals(0L, executeLuaScript(global, ip, user));
+        assertEquals("95", redissonClient.getBucket(globalKey + ":value", StringCodec.INSTANCE).get());
+        assertEquals("5", redissonClient.getBucket(ipKey + ":value", StringCodec.INSTANCE).get());
+        assertEquals("0", redissonClient.getBucket(userKey + ":value", StringCodec.INSTANCE).get());
     }
 
-    private Object executeLuaScript(List<String> keys, long maxCount) {
+    private Object executeLuaScript(RuleArg... rules) {
         RScript script = redissonClient.getScript(StringCodec.INSTANCE);
+        List<Object> args = new ArrayList<>();
+        args.add(String.valueOf(System.currentTimeMillis()));
+        args.add(String.valueOf(1));
+        args.add(java.util.UUID.randomUUID().toString());
 
-        Object[] args = {
-                String.valueOf(System.currentTimeMillis()),
-                String.valueOf(1),
-                String.valueOf(1000),
-                String.valueOf(maxCount),
-                java.util.UUID.randomUUID().toString()
-        };
-
-        List<Object> keysList = new ArrayList<>(keys);
+        List<Object> keysList = new ArrayList<>(rules.length);
+        for (RuleArg rule : rules) {
+            keysList.add(rule.key());
+            args.add(String.valueOf(rule.intervalMs()));
+            args.add(String.valueOf(rule.maxCount()));
+        }
 
         Object result = script.eval(
                 RScript.Mode.READ_WRITE,
                 luaScript,
                 RScript.ReturnType.VALUE,
                 keysList,
-                args
+                args.toArray()
         );
 
         if (result instanceof Number) {
@@ -131,5 +153,8 @@ class RateLimitIntegrationTest {
             redissonClient.getKeys().deleteByPattern("ratelimit:test*");
             redissonClient.shutdown();
         }
+    }
+
+    private record RuleArg(String key, long intervalMs, long maxCount) {
     }
 }

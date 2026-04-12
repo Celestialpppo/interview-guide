@@ -3,6 +3,7 @@ package interview.guide.common.annotation;
 import interview.guide.common.aspect.RateLimitAspect;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -15,6 +16,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
+@Repeatable(RateLimits.class)
 public @interface RateLimit {
 
     /**
@@ -36,13 +38,11 @@ public @interface RateLimit {
     }
 
     /**
-     * 限流维度配置
-     * 支持多维度组合，只有所有维度都满足条件时才允许请求通过
-     * 例如：{Dimension.GLOBAL, Dimension.USER} 表示同时进行全局限流和用户级限流
+     * 当前限流规则对应的维度
      *
-     * @return 限流维度数组
+     * @return 限流维度
      */
-    Dimension[] dimensions() default {Dimension.GLOBAL};
+    Dimension dimension() default Dimension.GLOBAL;
 
     /**
      * 在指定时间窗口内允许的最大请求数

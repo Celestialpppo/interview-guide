@@ -88,7 +88,8 @@ public class KnowledgeBaseController {
      * 基于知识库回答问题（支持多知识库）
      */
     @PostMapping("/api/knowledgebase/query")
-    @RateLimit(dimensions = {RateLimit.Dimension.GLOBAL, RateLimit.Dimension.IP}, count = 10)
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 100)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 10)
     public Result<QueryResponse> queryKnowledgeBase(@Valid @RequestBody QueryRequest request) {
         return Result.success(queryService.queryKnowledgeBase(request));
     }
@@ -97,7 +98,8 @@ public class KnowledgeBaseController {
      * 基于知识库回答问题（流式SSE，支持多知识库）
      */
     @PostMapping(value = "/api/knowledgebase/query/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @RateLimit(dimensions = {RateLimit.Dimension.GLOBAL, RateLimit.Dimension.IP}, count = 5)
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
     public Flux<String> queryKnowledgeBaseStream(@Valid @RequestBody QueryRequest request) {
         log.debug("收到知识库流式查询请求: kbIds={}, question={}, 线程: {} (虚拟线程: {})",
             request.knowledgeBaseIds(), request.question(), Thread.currentThread(), Thread.currentThread().isVirtual());
@@ -145,7 +147,8 @@ public class KnowledgeBaseController {
      * 上传知识库文件
      */
     @PostMapping(value = "/api/knowledgebase/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @RateLimit(dimensions = {RateLimit.Dimension.GLOBAL, RateLimit.Dimension.IP}, count = 3)
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 3)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 3)
     public Result<Map<String, Object>> uploadKnowledgeBase(
             @RequestParam(value = "file") MultipartFile file,
             @RequestParam(value = "name", required = false) String name,
@@ -201,7 +204,8 @@ public class KnowledgeBaseController {
      * 用于向量化失败后的重试
      */
     @PostMapping("/api/knowledgebase/{id}/revectorize")
-    @RateLimit(dimensions = {RateLimit.Dimension.GLOBAL, RateLimit.Dimension.IP}, count = 2)
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 2)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 2)
     public Result<Void> revectorize(@PathVariable Long id) {
         uploadService.revectorize(id);
         return Result.success(null);

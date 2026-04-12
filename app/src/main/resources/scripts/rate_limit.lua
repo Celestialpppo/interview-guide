@@ -6,20 +6,25 @@
 -- KEYS[1..N]: 限流维度键列表
 -- ARGV[1]: 当前时间戳（毫秒）
 -- ARGV[2]: 申请令牌数
--- ARGV[3]: 时间窗口（毫秒）
--- ARGV[4]: 最大令牌数（窗口内允许的总数）
--- ARGV[5]: 请求唯一标识
+-- ARGV[3]: 请求唯一标识
+-- ARGV[4..]: 每条规则依次传入 intervalMs、maxTokens
 
 local now_ms = tonumber(ARGV[1])
 local permits = tonumber(ARGV[2])
-local interval = tonumber(ARGV[3])
-local max_tokens = tonumber(ARGV[4])
-local request_id = ARGV[5]
+local request_id = ARGV[3]
+
+local function get_rule_args(rule_index)
+    local base = 4 + (rule_index - 1) * 2
+    local interval = tonumber(ARGV[base])
+    local max_tokens = tonumber(ARGV[base + 1])
+    return interval, max_tokens
+end
 
 -- 第一阶段：预检查阶段 - 检查所有维度是否有足够令牌
 for i, key in ipairs(KEYS) do
     local value_key = key .. ":value"
     local permits_key = key .. ":permits"
+    local interval, max_tokens = get_rule_args(i)
 
     -- 初始化 value_key（如果不存在）
     if redis.call("exists", value_key) == 0 then
@@ -40,6 +45,7 @@ for i, key in ipairs(KEYS) do
         end
 
         -- 删除过期记录
+        -- 删除 permits_key 这个 ZSet 中，score 在 [0, now_ms - interval] 范围内的所有成员。
         redis.call("zremrangebyscore", permits_key, 0, now_ms - interval)
 
         -- 回收配额
@@ -62,6 +68,7 @@ end
 for i, key in ipairs(KEYS) do
     local value_key = key .. ":value"
     local permits_key = key .. ":permits"
+    local interval, max_tokens = get_rule_args(i)
 
     -- 记录本次令牌分配（格式：request_id:permits）
     local permit_record = request_id .. ":" .. permits

@@ -1,6 +1,7 @@
 package interview.guide.common.exception;
 
 import interview.guide.common.result.Result;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 /**
@@ -132,8 +134,16 @@ public class GlobalExceptionHandler {
      * 统一返回 HTTP 200，通过业务错误码区分异常类型
      */
     @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.OK)
-    public Result<Void> handleException(Exception e) {
+//    @ResponseStatus(HttpStatus.OK)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Result<Void> handleException(Exception e, HttpServletRequest request) throws Exception {
+        String uri = request.getRequestURI();
+
+        if (uri != null && uri.startsWith("/actuator")) {
+            System.out.println(Arrays.toString(e.getStackTrace()));
+            throw e;
+        }
+
         log.error("系统异常: {}", e.getMessage(), e);
         return Result.error(ErrorCode.INTERNAL_ERROR, "系统繁忙，请稍后重试");
     }

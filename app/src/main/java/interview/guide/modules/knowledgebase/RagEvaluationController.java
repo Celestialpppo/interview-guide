@@ -22,7 +22,7 @@ public class RagEvaluationController {
     private final RagEvalDatasetService ragEvalDatasetService;
     private final RagEvalRunService ragEvalRunService;
 
-    @PostMapping(value = "/api/admin/rag-evals/datasets/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/api/rag-evals/datasets/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<RagEvalDatasetImportResponse> importDataset(
         @RequestParam("file") MultipartFile file,
         @RequestParam(value = "name", required = false) String name,
@@ -36,17 +36,17 @@ public class RagEvaluationController {
         ));
     }
 
-    @PostMapping("/api/admin/rag-evals/runs")
+    @PostMapping("/api/rag-evals/runs")
     public Result<RagEvalRunDetailDTO> createRun(@Valid @RequestBody RagEvalRunRequest request) {
         return Result.success(ragEvalRunService.createAndExecuteRun(request));
     }
 
-    @GetMapping("/api/admin/rag-evals/runs/{runId}")
+    @GetMapping("/api/rag-evals/runs/{runId}")
     public Result<RagEvalRunDetailDTO> getRun(@PathVariable Long runId) {
         return Result.success(ragEvalRunService.getRunDetail(runId));
     }
 
-    @GetMapping("/api/admin/rag-evals/runs/{runId}/cases")
+    @GetMapping("/api/rag-evals/runs/{runId}/cases")
     public Result<List<RagEvalRunCaseDTO>> listRunCases(@PathVariable Long runId) {
         return Result.success(ragEvalRunService.listRunCases(runId));
     }

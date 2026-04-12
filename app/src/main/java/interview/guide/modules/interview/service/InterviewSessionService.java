@@ -280,6 +280,7 @@ public class InterviewSessionService {
     /**
      * 提交答案（并进入下一题）
      * 如果是最后一题，自动触发异步评估
+     * Write-Through: Update Cache -> Update DB
      */
     public SubmitAnswerResponse submitAnswer(SubmitAnswerRequest request) {
         CachedSession session = getOrRestoreSession(request.sessionId());
@@ -417,6 +418,7 @@ public class InterviewSessionService {
 
     /**
      * 获取或恢复会话（优先从缓存获取）
+     * Cache-Aside: Read Cache -(not existed)> Read DB -> Write Cache
      */
     private CachedSession getOrRestoreSession(String sessionId) {
         // 1. 尝试从 Redis 缓存获取
@@ -452,6 +454,7 @@ public class InterviewSessionService {
 
         InterviewReportDTO report = evaluationService.evaluateInterview(
             sessionId,
+            session.getResumeId(),
             session.getResumeText(),
             questions
         );

@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @Table(name = "interview_answers",
     uniqueConstraints = {
         @UniqueConstraint(name = "uk_interview_answer_session_question", columnNames = {"session_id", "question_index"})
-    },
+    }, //表级别定义唯一约束，(session_id, question_index) 这对值组合唯一。
     indexes = {
         @Index(name = "idx_interview_answer_session_question", columnList = "session_id,question_index")
     })

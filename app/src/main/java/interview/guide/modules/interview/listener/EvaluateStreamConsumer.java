@@ -38,8 +38,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         InterviewSessionRepository sessionRepository,
         AnswerEvaluationService evaluationService,
         InterviewPersistenceService persistenceService,
-        ObjectMapper objectMapper
-    ) {
+        ObjectMapper objectMapper) {
         super(redisService);
         this.sessionRepository = sessionRepository;
         this.evaluationService = evaluationService;
@@ -119,8 +118,9 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
             }
         }
 
+        Long resumeId = session.getResume().getId();
         String resumeText = session.getResume().getResumeText();
-        InterviewReportDTO report = evaluationService.evaluateInterview(sessionId, resumeText, questions);
+        InterviewReportDTO report = evaluationService.evaluateInterview(sessionId, resumeId, resumeText, questions);
         persistenceService.saveReport(sessionId, report);
     }
 

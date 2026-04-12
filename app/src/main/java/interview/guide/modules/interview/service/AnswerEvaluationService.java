@@ -8,6 +8,8 @@ import interview.guide.modules.interview.model.InterviewReportDTO;
 import interview.guide.modules.interview.model.InterviewReportDTO.CategoryScore;
 import interview.guide.modules.interview.model.InterviewReportDTO.QuestionEvaluation;
 import interview.guide.modules.interview.model.InterviewReportDTO.ReferenceAnswer;
+import interview.guide.modules.resume.model.ResumeAnalysisEntity;
+import interview.guide.modules.resume.service.ResumePersistenceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -44,6 +46,7 @@ public class AnswerEvaluationService {
     private final PromptTemplate summaryUserPromptTemplate;
     private final BeanOutputConverter<FinalSummaryDTO> summaryOutputConverter;
     private final StructuredOutputInvoker structuredOutputInvoker;
+    private final ResumePersistenceService resumePersistenceService;
     private final int evaluationBatchSize;
     
     // 中间DTO用于接收AI响应
@@ -82,6 +85,7 @@ public class AnswerEvaluationService {
     public AnswerEvaluationService(
             ChatClient.Builder chatClientBuilder,
             StructuredOutputInvoker structuredOutputInvoker,
+            ResumePersistenceService resumePersistenceService,
             @Value("classpath:prompts/interview-evaluation-system.st") Resource systemPromptResource,
             @Value("classpath:prompts/interview-evaluation-user.st") Resource userPromptResource,
             @Value("classpath:prompts/interview-evaluation-summary-system.st") Resource summarySystemPromptResource,
@@ -89,6 +93,7 @@ public class AnswerEvaluationService {
             @Value("${app.interview.evaluation.batch-size:8}") int evaluationBatchSize) throws IOException {
         this.chatClient = chatClientBuilder.build();
         this.structuredOutputInvoker = structuredOutputInvoker;
+        this.resumePersistenceService = resumePersistenceService;
         this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
         this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
         this.outputConverter = new BeanOutputConverter<>(EvaluationReportDTO.class);
@@ -101,19 +106,20 @@ public class AnswerEvaluationService {
     /**
      * 评估完整面试并生成报告
      */
-    public InterviewReportDTO evaluateInterview(String sessionId, String resumeText,
+    public InterviewReportDTO evaluateInterview(String sessionId, Long resumeId, String resumeText,
                                                  List<InterviewQuestionDTO> questions) {
         log.info("开始评估面试: {}, 共{}题", sessionId, questions.size());
-        
+
         try {
-            // 简历摘要（限制长度）
-            String resumeSummary = resumeText.length() > 500 
-                ? resumeText.substring(0, 500) + "..." 
-                : resumeText;
+            // 优先使用 AI 生成的简历摘要，查不到则 fallback 到硬截断
+            String effectiveResumeSummary = resumePersistenceService.getLatestAnalysis(resumeId)
+                    .map(ResumeAnalysisEntity::getSummary)
+                    .filter(s -> s != null && !s.isBlank())
+                    .orElseGet(() -> resumeText.length() > 500 ? resumeText.substring(0, 500) + "..." : resumeText);
 
             // 分批评估，避免单次上下文过大导致 token 超限
             // 调用大模型，对questions分批次，没一个批次返回一个BatchEvaluationResult，包含这个批次所有问题的QuestionEvaluationDTO
-            List<BatchEvaluationResult> batchResults = evaluateInBatches(sessionId, resumeSummary, questions);
+            List<BatchEvaluationResult> batchResults = evaluateInBatches(sessionId, effectiveResumeSummary, questions);
 
             List<QuestionEvaluationDTO> mergedEvaluations = mergeQuestionEvaluations(batchResults);
             String fallbackOverallFeedback = mergeOverallFeedback(batchResults); //对每一个批次的几个问题的总体反馈的简单拼接
@@ -121,7 +127,7 @@ public class AnswerEvaluationService {
             List<String> fallbackImprovements = mergeListItems(batchResults, false);
             FinalSummaryDTO finalSummary = summarizeBatchResults( //再次调用大模型进行全局总结
                 sessionId,
-                resumeSummary,
+                effectiveResumeSummary,
                 questions,
                 mergedEvaluations,
                 fallbackOverallFeedback,
