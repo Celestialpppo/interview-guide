@@ -119,7 +119,7 @@ public class InterviewScheduleController {
      * @param status 新状态
      * @return 更新后的面试记录
      */
-    @PatchMapping("/{id}/status")
+    @RequestMapping(path = "/{id}/status", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public Result<InterviewScheduleDTO> updateStatus(
         @PathVariable Long id,
         @RequestParam InterviewStatus status
