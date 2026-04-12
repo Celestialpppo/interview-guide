@@ -24,11 +24,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
 
     /**
      * 根据会话ID查找（同时加载关联的简历）
-     * Join关联查询，Fetch把关联对象也查出来
-     * :sessionId：命名参数
-     * /@Param("sessionId")这个是把方法参数绑定到上面的命名参数。
      */
-    @Query("SELECT s FROM InterviewSessionEntity s JOIN FETCH s.resume WHERE s.sessionId = :sessionId") //JPQL
+    @Query("SELECT s FROM InterviewSessionEntity s LEFT JOIN FETCH s.resume WHERE s.sessionId = :sessionId")
     Optional<InterviewSessionEntity> findBySessionIdWithResume(@Param("sessionId") String sessionId);
     
     /**
@@ -61,4 +58,19 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
         Long resumeId,
         List<SessionStatus> statuses
     );
+
+    /**
+     * 查找所有面试会话（按创建时间倒序）
+     */
+    List<InterviewSessionEntity> findAllByOrderByCreatedAtDesc();
+
+    /**
+     * 根据 skillId 查找最近的面试记录（用于通用模式历史题去重）
+     */
+    List<InterviewSessionEntity> findTop10BySkillIdOrderByCreatedAtDesc(String skillId);
+
+    /**
+     * 根据 resumeId + skillId 查找最近的面试记录（精确匹配）
+     */
+    List<InterviewSessionEntity> findTop10ByResumeIdAndSkillIdOrderByCreatedAtDesc(Long resumeId, String skillId);
 }

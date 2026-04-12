@@ -5,14 +5,13 @@ import interview.guide.infrastructure.redis.RedisService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tomcat.util.threads.ThreadPoolExecutor;
 import org.redisson.api.stream.StreamMessageId;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -25,9 +24,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public abstract class AbstractStreamConsumer<T> {
 
     private final RedisService redisService;
-    //控制消费循环。
-    //单例继承这个抽象类，然后作为一个单例bean使用，单例的话就只有一个running实例，多个消费者共用这个running实例
-    //所以才需要AtomicBoolean在多线程的情况下，会保持可见性，避免一个线程修改running的值，其他线程看不到。
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExecutorService executorService;
     private String consumerName;
@@ -36,7 +32,6 @@ public abstract class AbstractStreamConsumer<T> {
         this.redisService = redisService;
     }
 
-    //当 Spring 把这个 Bean 创建好、依赖注入也完成之后，自动调用这个方法。
     @PostConstruct
     public void init() {
         this.consumerName = consumerPrefix() + UUID.randomUUID().toString().substring(0, 8);
@@ -49,23 +44,24 @@ public abstract class AbstractStreamConsumer<T> {
         }
 
         this.executorService = new ThreadPoolExecutor(
-                1,
-                1,
-                0,
-                TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(),
-                r -> {
-                    Thread t = new Thread(r, threadName());
-                    t.setDaemon(true);
-                    return t;
-                });
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(),
+            r -> {
+                Thread t = new Thread(r, threadName());
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy()
+        );
 
         running.set(true);
         executorService.submit(this::consumeLoop);
         log.info("{}消费者已启动: consumerName={}", taskDisplayName(), consumerName);
     }
 
-    //当 Spring 容器销毁这个 Bean 时，自动调用这个方法。
     @PreDestroy
     public void shutdown() {
         running.set(false);
@@ -75,7 +71,6 @@ public abstract class AbstractStreamConsumer<T> {
         log.info("{}消费者已关闭: consumerName={}", taskDisplayName(), consumerName);
     }
 
-    //消费循环
     private void consumeLoop() {
         while (running.get()) {
             try {
@@ -97,9 +92,7 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
-    //处理单个消息
     private void processMessage(StreamMessageId messageId, Map<String, String> data) {
-        //解析消息
         T payload = parsePayload(messageId, data);
         if (payload == null) {
             ackMessage(messageId);
@@ -129,7 +122,6 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
-    //解析重试次数
     protected int parseRetryCount(Map<String, String> data) {
         try {
             return Integer.parseInt(data.getOrDefault(AsyncTaskStreamConstants.FIELD_RETRY_COUNT, "0"));
@@ -138,7 +130,6 @@ public abstract class AbstractStreamConsumer<T> {
         }
     }
 
-    //截断错误信息
     protected String truncateError(String error) {
         if (error == null) {
             return null;
@@ -146,7 +137,6 @@ public abstract class AbstractStreamConsumer<T> {
         return error.length() > 500 ? error.substring(0, 500) : error;
     }
 
-    //确认消息
     private void ackMessage(StreamMessageId messageId) {
         try {
             redisService.streamAck(streamKey(), groupName(), messageId);

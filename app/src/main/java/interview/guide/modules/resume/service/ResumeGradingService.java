@@ -6,14 +6,12 @@ import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse.ScoreDetail;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse.Suggestion;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -26,9 +24,10 @@ import java.util.Map;
  * 简历评分服务
  * 使用Spring AI调用LLM对简历进行评分和建议
  */
-@Slf4j
 @Service
 public class ResumeGradingService {
+
+    private static final Logger log = LoggerFactory.getLogger(ResumeGradingService.class);
 
     private final ChatClient chatClient;
     private final PromptTemplate systemPromptTemplate;
@@ -63,12 +62,18 @@ public class ResumeGradingService {
     public ResumeGradingService(
             ChatClient.Builder chatClientBuilder,
             StructuredOutputInvoker structuredOutputInvoker,
-            @Value("classpath:prompts/resume-analysis-system.st") Resource systemPromptResource,
-            @Value("classpath:prompts/resume-analysis-user.st") Resource userPromptResource) throws IOException {
+            ResumeAnalysisProperties properties,
+            ResourceLoader resourceLoader) throws IOException {
         this.chatClient = chatClientBuilder.build();
-        this.structuredOutputInvoker = structuredOutputInvoker; // structuredOutputInvoker 统一封装结构化输出调用与重试策略。
-        this.systemPromptTemplate = new PromptTemplate(systemPromptResource.getContentAsString(StandardCharsets.UTF_8));
-        this.userPromptTemplate = new PromptTemplate(userPromptResource.getContentAsString(StandardCharsets.UTF_8));
+        this.structuredOutputInvoker = structuredOutputInvoker;
+        this.systemPromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(properties.getSystemPromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
+        this.userPromptTemplate = new PromptTemplate(
+            resourceLoader.getResource(properties.getUserPromptPath())
+                .getContentAsString(StandardCharsets.UTF_8)
+        );
         this.outputConverter = new BeanOutputConverter<>(ResumeAnalysisResponseDTO.class);
     }
     

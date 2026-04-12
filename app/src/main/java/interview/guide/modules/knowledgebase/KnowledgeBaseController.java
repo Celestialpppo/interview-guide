@@ -12,6 +12,7 @@ import interview.guide.modules.knowledgebase.service.KnowledgeBaseListService;
 import interview.guide.modules.knowledgebase.service.KnowledgeBaseQueryService;
 import interview.guide.modules.knowledgebase.service.KnowledgeBaseUploadService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -25,7 +26,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
  * 知识库控制器
@@ -33,6 +33,7 @@ import java.util.function.Function;
 @Slf4j
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "知识库管理", description = "知识库上传、下载、查询、分类与向量化")
 public class KnowledgeBaseController {
 
     private final KnowledgeBaseUploadService uploadService;
@@ -66,12 +67,7 @@ public class KnowledgeBaseController {
     @GetMapping("/api/knowledgebase/{id}")
     public Result<KnowledgeBaseListItemDTO> getKnowledgeBase(@PathVariable Long id) {
         return listService.getKnowledgeBase(id)
-                .map(new Function<KnowledgeBaseListItemDTO, Result<KnowledgeBaseListItemDTO>>(){
-                    @Override
-                    public Result<KnowledgeBaseListItemDTO> apply(KnowledgeBaseListItemDTO knowledgeBaseListItemDTO) {
-                        return Result.success(knowledgeBaseListItemDTO);
-                    }
-                })
+                .map(Result::success)
                 .orElse(Result.error("知识库不存在"));
     }
 
@@ -88,7 +84,7 @@ public class KnowledgeBaseController {
      * 基于知识库回答问题（支持多知识库）
      */
     @PostMapping("/api/knowledgebase/query")
-    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 100)
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 10)
     @RateLimit(dimension = RateLimit.Dimension.IP, count = 10)
     public Result<QueryResponse> queryKnowledgeBase(@Valid @RequestBody QueryRequest request) {
         return Result.success(queryService.queryKnowledgeBase(request));
@@ -150,7 +146,7 @@ public class KnowledgeBaseController {
     @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 3)
     @RateLimit(dimension = RateLimit.Dimension.IP, count = 3)
     public Result<Map<String, Object>> uploadKnowledgeBase(
-            @RequestParam(value = "file") MultipartFile file,
+            @RequestParam("file") MultipartFile file,
             @RequestParam(value = "name", required = false) String name,
             @RequestParam(value = "category", required = false) String category) {
         return Result.success(uploadService.uploadKnowledgeBase(file, name, category));

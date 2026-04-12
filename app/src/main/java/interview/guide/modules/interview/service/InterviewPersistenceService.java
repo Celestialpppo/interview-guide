@@ -1,8 +1,10 @@
 package interview.guide.modules.interview.service;
 
+import interview.guide.common.constant.CommonConstants.InterviewDefaults;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
+import interview.guide.modules.interview.model.HistoricalQuestion;
 import interview.guide.modules.interview.model.InterviewAnswerEntity;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.model.InterviewReportDTO;
@@ -20,6 +22,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,29 +41,35 @@ public class InterviewPersistenceService {
     private final ObjectMapper objectMapper;
     
     /**
-     * 保存新的面试会话
+     * 保存新的面试会话（支持可选简历）
      */
     @Transactional(rollbackFor = Exception.class)
-    public InterviewSessionEntity saveSession(String sessionId, Long resumeId, 
-                                              int totalQuestions, 
-                                              List<InterviewQuestionDTO> questions) {
+    public InterviewSessionEntity saveSession(String sessionId, Long resumeId,
+                                              int totalQuestions,
+                                              List<InterviewQuestionDTO> questions,
+                                              String llmProvider,
+                                              String skillId,
+                                              String difficulty) {
         try {
-            Optional<ResumeEntity> resumeOpt = resumeRepository.findById(resumeId);
-            if (resumeOpt.isEmpty()) {
-                throw new BusinessException(ErrorCode.RESUME_NOT_FOUND);
-            }
-            
             InterviewSessionEntity session = new InterviewSessionEntity();
             session.setSessionId(sessionId);
-            session.setResume(resumeOpt.get());
             session.setTotalQuestions(totalQuestions);
             session.setCurrentQuestionIndex(0);
             session.setStatus(InterviewSessionEntity.SessionStatus.CREATED);
             session.setQuestionsJson(objectMapper.writeValueAsString(questions));
-            
+            session.setLlmProvider(llmProvider != null ? llmProvider : InterviewDefaults.LLM_PROVIDER);
+            session.setSkillId(skillId != null ? skillId : InterviewDefaults.SKILL_ID);
+            session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);
+
+            // 简历可选：有 resumeId 则关联简历
+            if (resumeId != null) {
+                Optional<ResumeEntity> resumeOpt = resumeRepository.findById(resumeId);
+                resumeOpt.ifPresent(session::setResume);
+            }
+
             InterviewSessionEntity saved = sessionRepository.save(session);
-            log.info("面试会话已保存: sessionId={}, resumeId={}", sessionId, resumeId);
-            
+            log.info("面试会话已保存: sessionId={}, skillId={}, resumeId={}", sessionId, skillId, resumeId);
+
             return saved;
         } catch (JacksonException e) {
             log.error("序列化问题列表失败: {}", e.getMessage(), e);
@@ -173,13 +182,12 @@ public class InterviewPersistenceService {
             session.setStatus(InterviewSessionEntity.SessionStatus.EVALUATED);
             session.setCompletedAt(LocalDateTime.now());
 
-            sessionRepository.save(session); //会话表存整场总结。
+            sessionRepository.save(session);
 
             // 查询已存在的答案，建立索引
             List<InterviewAnswerEntity> existingAnswers = answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId);
             java.util.Map<Integer, InterviewAnswerEntity> answerMap = existingAnswers.stream()
-                .collect(java.util.stream.Collectors.toMap( //把流里的元素收集起来，最后变成别的容器（map）
-                        //toMap(keyMapper, valueMapper, mergeFunction)
+                .collect(java.util.stream.Collectors.toMap(
                     InterviewAnswerEntity::getQuestionIndex,
                     a -> a,
                     (a1, a2) -> a1
@@ -248,7 +256,14 @@ public class InterviewPersistenceService {
     public List<InterviewSessionEntity> findByResumeId(Long resumeId) {
         return sessionRepository.findByResumeIdOrderByCreatedAtDesc(resumeId);
     }
-    
+
+    /**
+     * 获取所有面试记录（按创建时间倒序）
+     */
+    public List<InterviewSessionEntity> findAll() {
+        return sessionRepository.findAllByOrderByCreatedAtDesc();
+    }
+
     /**
      * 删除简历的所有面试会话
      * 由于InterviewSessionEntity设置了cascade = CascadeType.ALL, orphanRemoval = true
@@ -297,33 +312,47 @@ public class InterviewPersistenceService {
         return answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId);
     }
 
-    /**
-     * 获取简历的历史提问列表（限制最近的 N 条）
-     */
-    public List<String> getHistoricalQuestionsByResumeId(Long resumeId) {
-        // 只查询最近的 10 个会话，避免加载过多历史数据
-        List<InterviewSessionEntity> sessions = sessionRepository.findTop10ByResumeIdOrderByCreatedAtDesc(resumeId);
+    private static final int MAX_HISTORICAL_QUESTIONS = 60;
 
-        //InterviewSessionEntity -> getQuestionsJson (string) -> InterviewQuestionDTO -> InterviewQuestionDTO.question (string)
-        // -> 去重、截断 -> questionList
-        return sessions.stream()
-            .map(InterviewSessionEntity::getQuestionsJson)//得到每个实体的问题Json字符串
-            .filter(json -> json != null && !json.isEmpty())//过滤
-            .flatMap(json -> { //返回的是一个Stream<String>，flatmap的作用是把stream去掉，变为String
+    /**
+     * 获取历史提问列表（结构化，按分类压缩用）。
+     * 有 resumeId 时精确匹配 resumeId + skillId；无 resumeId 时按 skillId 查全部（通用模式兜底）。
+     */
+    public List<HistoricalQuestion> getHistoricalQuestions(String skillId, Long resumeId) {
+        List<InterviewSessionEntity> sessions;
+        if (resumeId != null) {
+            sessions = sessionRepository.findTop10ByResumeIdAndSkillIdOrderByCreatedAtDesc(resumeId, skillId);
+        } else {
+            sessions = sessionRepository.findTop10BySkillIdOrderByCreatedAtDesc(skillId);
+        }
+
+        log.info("加载历史题目: skillId={}, resumeId={}, 查到 {} 个历史会话", skillId, resumeId, sessions.size());
+
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        List<HistoricalQuestion> result = sessions.stream()
+            .map(InterviewSessionEntity::getQuestionsJson)
+            .filter(json -> json != null && !json.isEmpty())
+            .flatMap(json -> {
                 try {
-                    List<InterviewQuestionDTO> questions = objectMapper.readValue(json, 
-                        new TypeReference<>() {}); //先把一个 JSON 反序列化成InterviewQuestionDTO
-                    // 过滤掉追问，只保留主问题作为历史参考
+                    List<InterviewQuestionDTO> questions = objectMapper.readValue(json,
+                        new TypeReference<List<InterviewQuestionDTO>>() {});
                     return questions.stream()
-                        .filter(q -> !q.isFollowUp()) //过滤追问
-                        .map(InterviewQuestionDTO::question);//Stream<String>,包含InterviewQuestionDTO::question
+                        .filter(q -> !q.isFollowUp())
+                        .map(q -> new HistoricalQuestion(q.question(), q.type(), q.topicSummary()));
                 } catch (Exception e) {
                     log.error("解析历史问题JSON失败", e);
-                    return java.util.stream.Stream.empty();
+                    return java.util.stream.Stream.<HistoricalQuestion>empty();
                 }
             })
-            .distinct()//字符串去重
-            .limit(30) // 核心改动：只保留最近的 30 道题
-            .toList(); // 返回一个 List<String>
+            .filter(hq -> seen.add(hq.question()))
+            .limit(MAX_HISTORICAL_QUESTIONS)
+            .toList();
+
+        log.info("历史题目加载完成: 去重后 {} 道主问题，按分类: {}", result.size(),
+            result.stream().collect(java.util.stream.Collectors.groupingBy(
+                hq -> hq.type() != null ? hq.type() : "GENERAL",
+                java.util.stream.Collectors.counting())));
+
+        return result;
     }
 }

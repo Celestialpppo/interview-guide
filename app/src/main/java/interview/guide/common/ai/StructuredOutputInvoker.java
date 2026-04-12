@@ -1,43 +1,61 @@
 package interview.guide.common.ai;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * 统一封装结构化输出调用与重试策略。
- * 在这里发生大模型调用。
  */
 @Component
 public class StructuredOutputInvoker {
 
-    //这是一个固定提示词模板。
     private static final String STRICT_JSON_INSTRUCTION = """
 请仅返回可被 JSON 解析器直接解析的 JSON 对象，并严格满足字段结构要求：
 1) 不要输出 Markdown 代码块（如 ```json）。
 2) 不要输出任何解释文字、前后缀、注释。
 3) 所有字符串内引号必须正确转义。
-""";
+    """;
 
-    //最大重试次数，至少为1
+    private static final String METRIC_INVOCATIONS = "app.ai.structured_output.invocations";
+    private static final String METRIC_ATTEMPTS = "app.ai.structured_output.attempts";
+    private static final String METRIC_LATENCY = "app.ai.structured_output.latency";
+    private static final String STATUS_SUCCESS = "success";
+    private static final String STATUS_FAILURE = "failure";
+    private static final int MAX_CONTEXT_TAG_LENGTH = 48;
+    private static final Pattern NON_ALNUM_PATTERN = Pattern.compile("[^a-z0-9_]+");
+    private static final Pattern MULTI_UNDERSCORE = Pattern.compile("_+");
+
     private final int maxAttempts;
-    //控制 “重试时要不要把上一次失败原因拼进 prompt”，可以把错误信息提示给模型，帮助它修正输出
     private final boolean includeLastErrorInRetryPrompt;
+    private final boolean retryUseRepairPrompt;
+    private final boolean retryAppendStrictJsonInstruction;
+    private final int errorMessageMaxLength;
+    private final boolean metricsEnabled;
+    private final MeterRegistry meterRegistry;
 
-    //@Value是Spring的注解，用于从配置文件中注入值
     public StructuredOutputInvoker(
-        @Value("${app.ai.structured-max-attempts:2}") int maxAttempts,
-        @Value("${app.ai.structured-include-last-error:true}") boolean includeLastErrorInRetryPrompt
+        StructuredOutputProperties properties,
+        @Autowired(required = false) MeterRegistry meterRegistry
     ) {
-        this.maxAttempts = Math.max(1, maxAttempts);
-        this.includeLastErrorInRetryPrompt = includeLastErrorInRetryPrompt;
+        this.maxAttempts = Math.max(1, properties.getStructuredMaxAttempts());
+        this.includeLastErrorInRetryPrompt = properties.isStructuredIncludeLastError();
+        this.retryUseRepairPrompt = properties.isStructuredRetryUseRepairPrompt();
+        this.retryAppendStrictJsonInstruction = properties.isStructuredRetryAppendStrictJsonInstruction();
+        this.errorMessageMaxLength = Math.max(20, properties.getStructuredErrorMessageMaxLength());
+        this.metricsEnabled = properties.isStructuredMetricsEnabled();
+        this.meterRegistry = meterRegistry;
     }
 
-    //调用大模型，要求返回结构化结果，并把结果解析成 T 类型对象；如果失败则重试，最后失败则抛业务异常。
     public <T> T invoke(
         ChatClient chatClient,
         String systemPromptWithFormat,
@@ -48,25 +66,36 @@ public class StructuredOutputInvoker {
         String logContext,
         Logger log
     ) {
+        long startNanos = System.nanoTime();
+        String contextTag = normalizeContextTag(logContext);
         Exception lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            //第一次尝试：直接用原始 systemPromptWithFormat
-            //第二次及以后：在原 prompt 基础上，调用 buildRetrySystemPrompt(...) 生成一个更严格的重试 prompt
             String attemptSystemPrompt = attempt == 1
                 ? systemPromptWithFormat
                 : buildRetrySystemPrompt(systemPromptWithFormat, lastError);
             try {
-                return chatClient.prompt() //开始构造一次 prompt 请求。
-                    .system(attemptSystemPrompt)//设置系统提示词。
-                    .user(userPrompt)//设置用户提示词。
-                    .call()//真正发起一次同步调用。
-                    .entity(outputConverter);//把模型返回的文本，转换成想要的 Java 类型。
+                T result = chatClient.prompt()
+                    .system(attemptSystemPrompt)
+                    .user(userPrompt)
+                    .call()
+                    .entity(outputConverter);
+                recordAttempt(contextTag, STATUS_SUCCESS);
+                recordInvocation(contextTag, STATUS_SUCCESS, startNanos);
+                return result;
             } catch (Exception e) {
                 lastError = e;
-                log.warn("{}结构化解析失败，准备重试: attempt={}, error={}", logContext, attempt, e.getMessage());
+                recordAttempt(contextTag, STATUS_FAILURE);
+                if (attempt < maxAttempts) {
+                    log.warn("{}结构化解析失败，准备重试: attempt={}/{}, error={}",
+                        logContext, attempt, maxAttempts, e.getMessage());
+                } else {
+                    log.error("{}结构化解析失败，已达最大重试次数: attempts={}, error={}",
+                        logContext, maxAttempts, e.getMessage());
+                }
             }
         }
 
+        recordInvocation(contextTag, STATUS_FAILURE, startNanos);
         throw new BusinessException(
             errorCode,
             errorPrefix + (lastError != null ? lastError.getMessage() : "unknown")
@@ -74,10 +103,17 @@ public class StructuredOutputInvoker {
     }
 
     private String buildRetrySystemPrompt(String systemPromptWithFormat, Exception lastError) {
+        if (!retryUseRepairPrompt) {
+            return systemPromptWithFormat;
+        }
+
         StringBuilder prompt = new StringBuilder(systemPromptWithFormat)
-            .append("\n\n")
-            .append(STRICT_JSON_INSTRUCTION)
-            .append("\n上次输出解析失败，请仅返回合法 JSON。");
+            .append("\n\n");
+
+        if (retryAppendStrictJsonInstruction) {
+            prompt.append(STRICT_JSON_INSTRUCTION).append('\n');
+        }
+        prompt.append("上次输出解析失败，请仅返回合法 JSON。");
 
         if (includeLastErrorInRetryPrompt && lastError != null && lastError.getMessage() != null) {
             prompt.append("\n上次失败原因：")
@@ -88,9 +124,48 @@ public class StructuredOutputInvoker {
 
     private String sanitizeErrorMessage(String message) {
         String oneLine = message.replace('\n', ' ').replace('\r', ' ').trim();
-        if (oneLine.length() > 200) {
-            return oneLine.substring(0, 200) + "...";
+        if (oneLine.length() > errorMessageMaxLength) {
+            return oneLine.substring(0, errorMessageMaxLength) + "...";
         }
         return oneLine;
+    }
+
+    private void recordAttempt(String contextTag, String status) {
+        if (!isMetricsAvailable()) {
+            return;
+        }
+        meterRegistry.counter(
+            METRIC_ATTEMPTS,
+            Tags.of("context", contextTag, "status", status)
+        ).increment();
+    }
+
+    private void recordInvocation(String contextTag, String status, long startNanos) {
+        if (!isMetricsAvailable()) {
+            return;
+        }
+        Tags tags = Tags.of("context", contextTag, "status", status);
+        meterRegistry.counter(METRIC_INVOCATIONS, tags).increment();
+        meterRegistry.timer(METRIC_LATENCY, tags)
+            .record(System.nanoTime() - startNanos, java.util.concurrent.TimeUnit.NANOSECONDS);
+    }
+
+    private boolean isMetricsAvailable() {
+        return metricsEnabled && meterRegistry != null;
+    }
+
+    private String normalizeContextTag(String raw) {
+        String source = (raw == null || raw.isBlank()) ? "unknown" : raw;
+        String normalized = source.toLowerCase(Locale.ROOT).trim().replace(' ', '_');
+        normalized = NON_ALNUM_PATTERN.matcher(normalized).replaceAll("_");
+        normalized = MULTI_UNDERSCORE.matcher(normalized).replaceAll("_");
+        normalized = normalized.replaceAll("^_+|_+$", "");
+        if (normalized.isBlank()) {
+            normalized = "unknown";
+        }
+        if (normalized.length() > MAX_CONTEXT_TAG_LENGTH) {
+            normalized = normalized.substring(0, MAX_CONTEXT_TAG_LENGTH);
+        }
+        return normalized;
     }
 }
