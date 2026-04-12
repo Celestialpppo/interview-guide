@@ -26,6 +26,9 @@
 ## 参考题库（references）
 {referenceSection}
 
+## 职位描述
+{jdSection}
+
 ## 面试官风格与追问规则（persona）
 {personaSection}
 

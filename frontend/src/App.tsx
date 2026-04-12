@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense, lazy } from 'react';
 import { historyApi, type InterviewDetail } from './api/history';
 import type { UploadKnowledgeBaseResponse } from './api/knowledgebase';
 import type { Difficulty } from './components/UnifiedInterviewModal';
+import type { CategoryDTO } from './api/skill';
 import { Loader2 } from 'lucide-react';
 import { ROUTES } from './constants/routes';
 
@@ -88,7 +89,8 @@ interface InterviewEntryState {
     difficulty?: Difficulty;
     questionCount?: number;
     llmProvider?: string;
-    customCategories?: { key: string; label: string; priority: string }[];
+    customCategories?: CategoryDTO[];
+    jdText?: string;
   };
 }
 

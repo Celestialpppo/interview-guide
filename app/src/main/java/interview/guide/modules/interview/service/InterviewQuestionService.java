@@ -92,12 +92,13 @@ public class InterviewQuestionService {
             String resumeText,
             int questionCount,
             List<HistoricalQuestion> historicalQuestions,
-            List<CategoryDTO> customCategories) {
+            List<CategoryDTO> customCategories,
+            String jdText) {
 
         SkillDTO skill;
         if (InterviewSkillService.CUSTOM_SKILL_ID.equals(skillId)
                 && customCategories != null && !customCategories.isEmpty()) {
-            skill = skillService.buildCustomSkill(customCategories);
+            skill = skillService.buildCustomSkill(customCategories, jdText != null ? jdText : "");
         } else {
             skill = skillService.getSkill(skillId);
         }
@@ -125,6 +126,7 @@ public class InterviewQuestionService {
             variables.put("historicalSection", buildHistoricalSection(historicalQuestions));
             variables.put("referenceSection", skillService.buildReferenceSection(skill, allocation));
             variables.put("personaSection", buildPersonaSection(skill.persona()));
+            variables.put("jdSection", buildJdSection(skill.sourceJd()));
 
             String systemPrompt = skillSystemPromptTemplate.render();
             String userPrompt = skillUserPromptTemplate.render(variables);
@@ -137,6 +139,16 @@ public class InterviewQuestionService {
             );
 
             List<InterviewQuestionDTO> questions = convertToQuestions(dto);
+            long mainQuestionCount = questions.stream().filter(q -> !Boolean.TRUE.equals(q.isFollowUp())).count();
+            if (mainQuestionCount == 0) {
+                log.warn("Skill 驱动出题返回空题单，回退到默认问题: skill={}, difficulty={}, requestedMainQuestions={}",
+                    skillId, difficulty, questionCount);
+                return generateFallbackQuestions(skill, questionCount);
+            }
+            if (mainQuestionCount < questionCount) {
+                log.warn("Skill 驱动出题主问题数量不足: skill={}, difficulty={}, requestedMainQuestions={}, actualMainQuestions={}",
+                    skillId, difficulty, questionCount, mainQuestionCount);
+            }
             log.info("Skill 驱动出题成功: {} 个问题", questions.size());
             return questions;
 
@@ -149,7 +161,7 @@ public class InterviewQuestionService {
     }
 
     public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount, List<HistoricalQuestion> historicalQuestions) {
-        return generateQuestionsBySkill(chatClient, InterviewDefaults.SKILL_ID, InterviewDefaults.DIFFICULTY, resumeText, questionCount, historicalQuestions, null);
+        return generateQuestionsBySkill(chatClient, InterviewDefaults.SKILL_ID, InterviewDefaults.DIFFICULTY, resumeText, questionCount, historicalQuestions, null, null);
     }
 
     public List<InterviewQuestionDTO> generateQuestions(ChatClient chatClient, String resumeText, int questionCount) {
@@ -199,6 +211,13 @@ public class InterviewQuestionService {
         return persona;
     }
 
+    private String buildJdSection(String sourceJd) {
+        if (sourceJd == null || sourceJd.isBlank()) {
+            return "";
+        }
+        return "## 职位描述（JD）\n根据以下 JD 关键要求出题，确保题目与岗位实际需求相关：\n" + sourceJd;
+    }
+
     private List<InterviewQuestionDTO> convertToQuestions(QuestionListDTO dto) {
         List<InterviewQuestionDTO> questions = new ArrayList<>();
         int index = 0;
@@ -238,14 +257,14 @@ public class InterviewQuestionService {
         int index = 0;
 
         if (!categories.isEmpty()) {
-            // 第一层：按 Skill categories 生成通用占位题
+            // 第一层：按 Skill categories 轮转生成占位题，保证主问题数量满足请求值
             int generated = 0;
-            for (SkillCategoryDTO cat : categories) {
-                if (generated >= count) break;
+            while (generated < count) {
+                SkillCategoryDTO cat = categories.get(generated % categories.size());
                 String question = "请谈谈你在\"" + cat.label() + "\"方向的技术理解和实践经验。";
                 questions.add(InterviewQuestionDTO.create(index++, question, cat.key(), cat.label(), null, false, null));
                 int mainIndex = index - 1;
-                for (int j = 0; j < followUpCount && generated + j + 1 < count; j++) {
+                for (int j = 0; j < followUpCount; j++) {
                     questions.add(InterviewQuestionDTO.create(
                         index++, buildDefaultFollowUp(question, j + 1),
                         cat.key(), buildFollowUpCategory(cat.label(), j + 1), null, true, mainIndex
