@@ -247,19 +247,29 @@ public class InterviewSkillService {
         Map<String, Integer> allocation = new LinkedHashMap<>();
         int remaining = totalQuestions;
 
+        // Phase 1: ALWAYS_ONE 保底各 1 题
         for (SkillCategoryDTO cat : alwaysOneCats) {
             if (remaining > 0) {
                 allocation.put(cat.key(), 1);
                 remaining--;
             }
         }
+
+        // Phase 2: 先给所有类目各 1 题（CORE 优先），保证覆盖率
         for (SkillCategoryDTO cat : coreCats) {
             if (remaining > 0) {
                 allocation.put(cat.key(), 1);
                 remaining--;
             }
         }
+        for (SkillCategoryDTO cat : normalCats) {
+            if (remaining > 0) {
+                allocation.put(cat.key(), 1);
+                remaining--;
+            }
+        }
 
+        // Phase 3: 剩余名额按 CORE 优先轮转分配
         while (remaining > 0) {
             for (SkillCategoryDTO cat : coreCats) {
                 if (remaining <= 0) break;
@@ -274,6 +284,10 @@ public class InterviewSkillService {
             if (coreCats.isEmpty() && normalCats.isEmpty()) break;
         }
 
+        // 确保所有类目都出现在 allocation 中
+        for (SkillCategoryDTO cat : coreCats) {
+            allocation.putIfAbsent(cat.key(), 0);
+        }
         for (SkillCategoryDTO cat : normalCats) {
             allocation.putIfAbsent(cat.key(), 0);
         }
