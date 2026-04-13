@@ -116,6 +116,16 @@ public class VoiceInterviewController {
     }
 
     /**
+     * 删除语音面试会话
+     */
+    @DeleteMapping("/sessions/{sessionId}")
+    public Result<Void> deleteSession(@PathVariable Long sessionId) {
+        log.info("Deleting voice interview session: {}", sessionId);
+        voiceInterviewService.deleteSession(sessionId);
+        return Result.success();
+    }
+
+    /**
      * Get conversation history for a session
      */
     @GetMapping("/sessions/{sessionId}/messages")
