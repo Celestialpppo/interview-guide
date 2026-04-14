@@ -37,7 +37,9 @@ public class InterviewSkillService {
 
     private static final int MIN_JD_LENGTH = 50;
 
+    //解析 SKILL.md 头部 YAML
     private static final Pattern FRONT_MATTER_PATTERN = Pattern.compile("(?s)^---\\s*\\n(.*?)\\n---\\s*\\n?(.*)$");
+    //从路径里提取 skillId
     private static final Pattern SKILL_ID_PATTERN = Pattern.compile(".*/skills/([^/]+)/SKILL\\.md$");
     private static final String SKILL_META_FILE = "skill.meta.yml";
     private static final String JD_PARSE_SYSTEM_PROMPT_PATH = "classpath:prompts/jd-parse-system.st";
@@ -76,6 +78,10 @@ public class InterviewSkillService {
         this.jdSystemPromptTemplate = new PromptTemplate(loadClasspathPrompt(JD_PARSE_SYSTEM_PROMPT_PATH));
     }
 
+    /**
+     * 应用启动时，把所有预设面试主题和参考资料索引都建好。
+     * @throws IOException
+     */
     @PostConstruct
     void loadPresetSkills() throws IOException {
         var resolver = new PathMatchingResourcePatternResolver();
@@ -162,6 +168,7 @@ public class InterviewSkillService {
             "基于职位描述提取的面试方向", categories,
             false, jdText, null, null);
     }
+
 
     public List<CategoryDTO> parseJd(String jdText) {
         if (jdText == null || jdText.length() < MIN_JD_LENGTH) {

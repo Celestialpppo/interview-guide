@@ -6,6 +6,10 @@ import java.util.Map;
 
 /**
  * 创建评测任务请求。
+ * retrieverConfig:
+ *   - rewriteEnabled
+ *   - topK
+ *   - minScore
  */
 public record RagEvalRunRequest(
     @NotNull(message = "datasetId 不能为空")

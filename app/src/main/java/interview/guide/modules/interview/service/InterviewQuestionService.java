@@ -90,7 +90,7 @@ public class InterviewQuestionService {
             ResourceLoader resourceLoader) throws IOException {
         this.structuredOutputInvoker = structuredOutputInvoker;
         this.skillService = skillService;
-        this.questionExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        this.questionExecutor = Executors.newVirtualThreadPerTaskExecutor(); //每来一个任务，就给它分配一个虚拟线程
         this.skillSystemPromptTemplate = loadTemplate(resourceLoader, properties.getQuestionSystemPromptPath());
         this.skillUserPromptTemplate = loadTemplate(resourceLoader, properties.getQuestionUserPromptPath());
         this.resumeSystemPromptTemplate = loadTemplate(resourceLoader, properties.getResumeQuestionSystemPromptPath());

@@ -481,7 +481,6 @@ public class InterviewSessionService {
         InterviewReportDTO report = evaluationService.evaluateInterview(
             chatClient,
             sessionId,
-            session.getResumeId(),
             session.getResumeText(),
             questions
         );
