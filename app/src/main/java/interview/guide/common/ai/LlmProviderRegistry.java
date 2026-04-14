@@ -88,49 +88,19 @@ public class LlmProviderRegistry {
             : getDefaultChatClient();
     }
 
+    /**
+     * 获取不带 SkillsTool 的 ChatClient，用于语音面试等不需要 Agent 工具调用的场景。
+     * 语音面试通过 VoiceInterviewPromptService 直接加载 persona，不需要 SkillsTool。
+     * 去掉 SkillsTool 避免简历存在时 LLM 优先调用工具而非直接回复。
+     */
+    public ChatClient getPlainChatClient(String providerId) {
+        String id = (providerId != null && !providerId.isBlank())
+            ? providerId : properties.getDefaultProvider();
+        return clientCache.computeIfAbsent(id + ":plain", this::createPlainChatClient);
+    }
+
     private ChatClient createChatClient(String providerId) {
-        ProviderConfig config = properties.getProviders().get(providerId);
-        if (config == null) {
-            log.error("[LlmProviderRegistry] Provider config not found: {}", providerId);
-            throw new IllegalArgumentException("Unknown LLM provider: " + providerId);
-        }
-
-        log.info("[LlmProviderRegistry] Building client - Provider: {}, BaseUrl: {}, Model: {}", 
-                 providerId, config.getBaseUrl(), config.getModel());
-
-        // Setup SimpleClientHttpRequestFactory with long timeouts (5 minutes for local models)
-        // This provides better compatibility with local servers like LM Studio
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(10000); // 10 seconds
-        requestFactory.setReadTimeout(300000);   // 5 minutes
-
-        // Create RestClient.Builder with timeout
-        RestClient.Builder restClientBuilder = RestClient.builder()
-                .requestFactory(requestFactory);
-
-        // Create OpenAiApi using builder to ensure compatibility
-        OpenAiApi openAiApi = OpenAiApi.builder()
-                .baseUrl(config.getBaseUrl())
-                .apiKey(config.getApiKey())
-                .restClientBuilder(restClientBuilder)
-                .build();
-
-        // Create OpenAiChatOptions with model name and default temperature
-        OpenAiChatOptions options = OpenAiChatOptions.builder()
-                .model(config.getModel())
-                .temperature(0.2)
-                .build();
-        
-        // Instantiate OpenAiChatModel with all required parameters for Spring AI 2.0.0-M4
-        OpenAiChatModel chatModel = new OpenAiChatModel(
-                openAiApi,
-                options,
-                toolCallingManager,
-                RetryUtils.DEFAULT_RETRY_TEMPLATE,
-                observationRegistry != null ? observationRegistry : ObservationRegistry.NOOP
-        );
-
-        log.info("[LlmProviderRegistry] Successfully created ChatClient for {}", providerId);
+        OpenAiChatModel chatModel = buildChatModel(providerId);
 
         ChatClient.Builder builder = ChatClient.builder(chatModel);
         if (interviewSkillsToolCallback != null) {
@@ -142,8 +112,51 @@ public class LlmProviderRegistry {
             log.info("[LlmProviderRegistry] Applied {} advisors for provider {}", advisors.size(), providerId);
         }
 
-        // Build and return the ChatClient
         return builder.build();
+    }
+
+    private ChatClient createPlainChatClient(String cacheKey) {
+        String providerId = cacheKey.replace(":plain", "");
+        OpenAiChatModel chatModel = buildChatModel(providerId);
+        log.info("[LlmProviderRegistry] Created plain ChatClient (no tools) for {}", providerId);
+        return ChatClient.builder(chatModel).build();
+    }
+
+    private OpenAiChatModel buildChatModel(String providerId) {
+        ProviderConfig config = properties.getProviders().get(providerId);
+        if (config == null) {
+            log.error("[LlmProviderRegistry] Provider config not found: {}", providerId);
+            throw new IllegalArgumentException("Unknown LLM provider: " + providerId);
+        }
+
+        log.info("[LlmProviderRegistry] Building ChatModel - Provider: {}, BaseUrl: {}, Model: {}",
+                 providerId, config.getBaseUrl(), config.getModel());
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(10000);
+        requestFactory.setReadTimeout(300000);
+
+        RestClient.Builder restClientBuilder = RestClient.builder()
+                .requestFactory(requestFactory);
+
+        OpenAiApi openAiApi = OpenAiApi.builder()
+                .baseUrl(config.getBaseUrl())
+                .apiKey(config.getApiKey())
+                .restClientBuilder(restClientBuilder)
+                .build();
+
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(config.getModel())
+                .temperature(0.2)
+                .build();
+
+        return new OpenAiChatModel(
+                openAiApi,
+                options,
+                toolCallingManager,
+                RetryUtils.DEFAULT_RETRY_TEMPLATE,
+                observationRegistry != null ? observationRegistry : ObservationRegistry.NOOP
+        );
     }
 
     private List<Advisor> buildDefaultAdvisors(String providerId) {
