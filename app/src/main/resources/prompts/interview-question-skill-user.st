@@ -26,9 +26,6 @@
 ## 职位描述
 {jdSection}
 
-## 面试官风格与追问规则（persona）
-{personaSection}
-
 ## 输出要求
 - questions 数组必须包含恰好 {questionCount} 个元素，不多不少
 - 每个主问题必须包含 topicSummary 字段：10 字以内的知识点摘要（用于历史去重），格式示例：

@@ -231,7 +231,6 @@ public class InterviewQuestionService {
             variables.put("allocationTable", allocationTable);
             variables.put("historicalSection", historicalSection);
             variables.put("referenceSection", skillService.buildReferenceSection(skill, allocation));
-            variables.put("personaSection", buildPersonaSection(skill.persona()));
             variables.put("jdSection", buildJdSection(skill.sourceJd()));
 
             String systemPrompt = skillSystemPromptTemplate.render()
@@ -412,13 +411,6 @@ public class InterviewQuestionService {
             sb.append('\n');
         }
         return sb.toString();
-    }
-
-    private String buildPersonaSection(String persona) {
-        if (persona == null || persona.isBlank()) {
-            return "使用专业、直接、可执行的技术面试官风格。";
-        }
-        return persona;
     }
 
     private String buildJdSection(String sourceJd) {
