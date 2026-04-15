@@ -1,5 +1,6 @@
 package interview.guide.modules.interview.service;
 
+import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.common.ai.StructuredOutputInvoker;
 import interview.guide.common.constant.CommonConstants.InterviewDefaults;
 import interview.guide.common.exception.BusinessException;
@@ -75,6 +76,7 @@ public class InterviewQuestionService {
     private final BeanOutputConverter<QuestionListDTO> outputConverter;
     private final StructuredOutputInvoker structuredOutputInvoker;
     private final InterviewSkillService skillService;
+    private final LlmProviderRegistry llmProviderRegistry;
     private final ExecutorService questionExecutor;
     private final int followUpCount;
 
@@ -87,9 +89,11 @@ public class InterviewQuestionService {
             StructuredOutputInvoker structuredOutputInvoker,
             InterviewSkillService skillService,
             InterviewQuestionProperties properties,
-            ResourceLoader resourceLoader) throws IOException {
+            ResourceLoader resourceLoader,
+            LlmProviderRegistry llmProviderRegistry) throws IOException {
         this.structuredOutputInvoker = structuredOutputInvoker;
         this.skillService = skillService;
+        this.llmProviderRegistry = llmProviderRegistry;
         this.questionExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.skillSystemPromptTemplate = loadTemplate(resourceLoader, properties.getQuestionSystemPromptPath());
         this.skillUserPromptTemplate = loadTemplate(resourceLoader, properties.getQuestionUserPromptPath());
@@ -134,7 +138,7 @@ public class InterviewQuestionService {
             skillId, questionCount, resumeCount, directionCount);
 
         CompletableFuture<List<InterviewQuestionDTO>> resumeFuture = CompletableFuture.supplyAsync(
-            () -> generateResumeQuestions(chatClient, resumeText, resumeCount, skill, difficultyDesc, historicalSection),
+            () -> generateResumeQuestions(resumeText, resumeCount, skill, difficultyDesc, historicalSection),
             questionExecutor);
 
         CompletableFuture<List<InterviewQuestionDTO>> directionFuture = CompletableFuture.supplyAsync(
@@ -173,9 +177,10 @@ public class InterviewQuestionService {
     }
 
     private List<InterviewQuestionDTO> generateResumeQuestions(
-            ChatClient chatClient, String resumeText, int questionCount,
+            String resumeText, int questionCount,
             SkillDTO skill, String difficultyDesc, String historicalSection) {
         try {
+            ChatClient plainClient = llmProviderRegistry.getPlainChatClient(null);
             Map<String, Object> variables = new HashMap<>();
             variables.put("questionCount", questionCount);
             variables.put("followUpCount", followUpCount);
@@ -189,7 +194,7 @@ public class InterviewQuestionService {
             String userPrompt = resumeUserPromptTemplate.render(variables);
 
             QuestionListDTO dto = structuredOutputInvoker.invoke(
-                chatClient, systemPrompt, userPrompt, outputConverter,
+                plainClient, systemPrompt, userPrompt, outputConverter,
                 ErrorCode.INTERVIEW_QUESTION_GENERATION_FAILED,
                 "简历题生成失败：", "简历题", log);
 
