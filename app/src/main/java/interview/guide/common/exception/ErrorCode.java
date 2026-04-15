@@ -11,7 +11,6 @@ import lombok.Getter;
 public enum ErrorCode {
     
     // ========== 通用错误 1xxx ==========
-    SUCCESS(200, "成功"),
     BAD_REQUEST(400, "请求参数错误"),
     UNAUTHORIZED(401, "未授权"),
     FORBIDDEN(403, "禁止访问"),
@@ -24,7 +23,6 @@ public enum ErrorCode {
     RESUME_PARSE_FAILED(2002, "简历解析失败"),
     RESUME_UPLOAD_FAILED(2003, "简历上传失败"),
     RESUME_DUPLICATE(2004, "简历已存在"),
-    RESUME_FILE_EMPTY(2005, "简历文件为空"),
     RESUME_FILE_TYPE_NOT_SUPPORTED(2006, "不支持的文件类型"),
     RESUME_ANALYSIS_FAILED(2007, "简历分析失败"),
     RESUME_ANALYSIS_NOT_FOUND(2008, "简历分析结果不存在"),
@@ -49,7 +47,6 @@ public enum ErrorCode {
     // ========== 知识库模块错误 6xxx ==========
     KNOWLEDGE_BASE_NOT_FOUND(6001, "知识库不存在"),
     KNOWLEDGE_BASE_PARSE_FAILED(6002, "知识库文件解析失败"),
-    KNOWLEDGE_BASE_UPLOAD_FAILED(6003, "知识库上传失败"),
     KNOWLEDGE_BASE_QUERY_FAILED(6004, "知识库查询失败"),
     KNOWLEDGE_BASE_DELETE_FAILED(6005, "知识库删除失败"),
     KNOWLEDGE_BASE_VECTORIZATION_FAILED(6006, "知识库向量化失败"),
@@ -69,10 +66,7 @@ public enum ErrorCode {
 
     // ========== 语音面试模块错误 10xxx ==========
     VOICE_SESSION_NOT_FOUND(10001, "语音面试会话不存在"),
-    VOICE_SESSION_ALREADY_ACTIVE(10002, "语音面试会话已在进行中"),
-    VOICE_SESSION_ALREADY_ENDED(10003, "语音面试会话已结束"),
     VOICE_EVALUATION_FAILED(10004, "语音面试评估失败"),
-    VOICE_EVALUATION_IN_PROGRESS(10005, "语音面试评估正在进行中"),
     VOICE_EVALUATION_NOT_FOUND(10006, "语音面试评估结果不存在");
     
     private final Integer code;

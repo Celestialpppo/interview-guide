@@ -89,14 +89,20 @@ public class LlmProviderRegistry {
     }
 
     /**
-     * 获取不带 SkillsTool 的 ChatClient，用于语音面试等不需要 Agent 工具调用的场景。
-     * 语音面试通过 VoiceInterviewPromptService 直接加载 persona，不需要 SkillsTool。
-     * 去掉 SkillsTool 避免简历存在时 LLM 优先调用工具而非直接回复。
+     * 获取不带 SkillsTool 的 ChatClient，用于简历题生成等不需要 Agent 工具调用的场景。
      */
     public ChatClient getPlainChatClient(String providerId) {
-        String id = (providerId != null && !providerId.isBlank())
-            ? providerId : properties.getDefaultProvider();
-        return clientCache.computeIfAbsent(id + ":plain", this::createPlainChatClient);
+        String id = resolveProviderId(providerId);
+        return clientCache.computeIfAbsent(id + ":plain", key -> createPlainChatClient(id));
+    }
+
+    /**
+     * 获取语音面试专用 ChatClient：SkillsTool + ToolCallAdvisor（流式）。
+     * 不加 Memory Advisor（语音面试手动管理对话历史）。
+     */
+    public ChatClient getVoiceChatClient(String providerId) {
+        String id = resolveProviderId(providerId);
+        return clientCache.computeIfAbsent(id + ":voice", key -> createVoiceChatClient(id));
     }
 
     private ChatClient createChatClient(String providerId) {
@@ -115,11 +121,24 @@ public class LlmProviderRegistry {
         return builder.build();
     }
 
-    private ChatClient createPlainChatClient(String cacheKey) {
-        String providerId = cacheKey.replace(":plain", "");
+    private ChatClient createPlainChatClient(String providerId) {
         OpenAiChatModel chatModel = buildChatModel(providerId);
         log.info("[LlmProviderRegistry] Created plain ChatClient (no tools) for {}", providerId);
         return ChatClient.builder(chatModel).build();
+    }
+
+    private ChatClient createVoiceChatClient(String providerId) {
+        OpenAiChatModel chatModel = buildChatModel(providerId);
+
+        ChatClient.Builder builder = ChatClient.builder(chatModel);
+        if (interviewSkillsToolCallback != null) {
+            builder.defaultToolCallbacks(interviewSkillsToolCallback);
+        }
+        if (toolCallingManager != null) {
+            builder.defaultAdvisors(buildToolCallAdvisor(true, true));
+        }
+        log.info("[LlmProviderRegistry] Created voice ChatClient (SkillsTool + streaming ToolCall) for {}", providerId);
+        return builder.build();
     }
 
     private OpenAiChatModel buildChatModel(String providerId) {
@@ -169,12 +188,9 @@ public class LlmProviderRegistry {
 
         if (config.isToolCallEnabled()) {
             if (toolCallingManager != null) {
-                ToolCallAdvisor toolCallAdvisor = ToolCallAdvisor.builder()
-                    .toolCallingManager(toolCallingManager)
-                    .conversationHistoryEnabled(config.isToolCallConversationHistoryEnabled())
-                    .streamToolCallResponses(config.isStreamToolCallResponses())
-                    .build();
-                advisors.add(toolCallAdvisor);
+                advisors.add(buildToolCallAdvisor(
+                    config.isToolCallConversationHistoryEnabled(),
+                    config.isStreamToolCallResponses()));
             } else {
                 log.warn("[LlmProviderRegistry] ToolCallAdvisor skipped: ToolCallingManager unavailable, provider={}", providerId);
             }
@@ -195,5 +211,19 @@ public class LlmProviderRegistry {
         }
 
         return advisors;
+    }
+
+    private ToolCallAdvisor buildToolCallAdvisor(boolean conversationHistoryEnabled,
+                                                  boolean streamToolCallResponses) {
+        return ToolCallAdvisor.builder()
+            .toolCallingManager(toolCallingManager)
+            .conversationHistoryEnabled(conversationHistoryEnabled)
+            .streamToolCallResponses(streamToolCallResponses)
+            .build();
+    }
+
+    private String resolveProviderId(String providerId) {
+        return (providerId != null && !providerId.isBlank())
+            ? providerId : properties.getDefaultProvider();
     }
 }

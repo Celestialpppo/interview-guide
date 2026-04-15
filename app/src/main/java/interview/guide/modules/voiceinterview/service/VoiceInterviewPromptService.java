@@ -1,16 +1,12 @@
 package interview.guide.modules.voiceinterview.service;
 
-import interview.guide.modules.interview.skill.InterviewSkillService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class VoiceInterviewPromptService {
 
-    private static final String DEFAULT_PROMPT = "你是一位专业的面试官，请根据候选人的回答进行深入提问。";
     private static final String VOICE_RESPONSE_CONSTRAINTS = """
             【语音面试输出约束】
             1. 每轮只问 1 个主问题，必要时最多补 1 个短追问。
@@ -21,14 +17,20 @@ public class VoiceInterviewPromptService {
             6. 语气简洁直接，适配口语对话。
             """;
 
-    private final InterviewSkillService skillService;
+    private static final String SKILL_TOOL_INSTRUCTION = """
+            你是一位 %s 方向的面试官。
+            如果尚未加载完整的角色设定，请调用 Skill 工具（command: %s）加载该技能的 SKILL.md。
+            工具输出包含完整的面试官角色和出题规则，后续对话应基于该角色进行。
+            """;
 
     public String generateSystemPromptWithContext(String skillId, String resumeText) {
-        String basePrompt = loadPersona(skillId);
+        StringBuilder prompt = new StringBuilder();
 
-        StringBuilder prompt = new StringBuilder(basePrompt)
-            .append("\n\n")
-            .append(VOICE_RESPONSE_CONSTRAINTS);
+        if (skillId != null && !skillId.isBlank()) {
+            prompt.append(String.format(SKILL_TOOL_INSTRUCTION, skillId, skillId));
+        }
+
+        prompt.append("\n\n").append(VOICE_RESPONSE_CONSTRAINTS);
 
         if (resumeText != null && !resumeText.isEmpty()) {
             prompt.append("\n\n【实时语音面试 - 候选人简历内容】\n")
@@ -37,19 +39,5 @@ public class VoiceInterviewPromptService {
                 .append(resumeText);
         }
         return prompt.toString();
-    }
-
-    private String loadPersona(String skillId) {
-        try {
-            InterviewSkillService.SkillDTO skill = skillService.getSkill(skillId);
-            String persona = skill.persona();
-            if (persona != null && !persona.isBlank()) {
-                log.debug("Loaded persona from template: {}", skillId);
-                return persona;
-            }
-        } catch (Exception e) {
-            log.warn("Failed to load persona for skillId: {}, using default prompt", skillId, e);
-        }
-        return DEFAULT_PROMPT;
     }
 }
