@@ -29,6 +29,12 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 面试方向 Skill 管理：分类分配、References 注入、自定义 Skill 构建。
+ *
+ * 与 SkillsTool 互补：SkillsTool 负责 LLM 按需加载 persona（SKILL.md body），
+ * 本类负责后端解析分类配置（skill.meta.yml）并批量注入 references 到 Prompt。
+ */
 @Slf4j
 @Service
 public class InterviewSkillService {
